@@ -279,7 +279,7 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
         radial-gradient(ellipse 88% 96% at 64% 46%, rgba(10,24,200,0.42) 0%, transparent 72%);
     border-radius: 42% 58% 50% 50% / 48% 44% 60% 52%;
     filter: blur(72px);
-    pointer-events: none; z-index: 1;
+    pointer-events: none; z-index: 0;
 }
 .zn-blob::before {
     content: ''; position: absolute; inset: -5%;
@@ -293,13 +293,13 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 280 280' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.70' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     background-size: 160px 160px; opacity: 0.30; mix-blend-mode: overlay;
-    pointer-events: none; z-index: 2;
+    pointer-events: none; z-index: 0;
 }
 .zn-bottom-fade {
     position: fixed; bottom: 0; right: 0; width: 65vw; height: 28vh;
     background: radial-gradient(ellipse 80% 100% at 62% 112%, rgba(10,22,200,0.48) 0%, transparent 65%);
     filter: blur(40px);
-    pointer-events: none; z-index: 1;
+    pointer-events: none; z-index: 0;
 }
 
 /* Main container */
@@ -308,6 +308,14 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
     padding-right: 3.8rem !important; padding-bottom: 4rem !important;
     max-width: 100% !important; position: relative; z-index: 10;
 }
+
+/* ── Three-layer z-index hierarchy ─────────────────────────────────────────
+   Layer 1 (z-0):  .zn-blob / .zn-grain / .zn-bottom-fade  (background)
+   Layer 2 (z-10): left column  — hero text, CTA buttons, brief form
+   Layer 3 (z-20): right column — badge pill, external pills, session, email
+   ─────────────────────────────────────────────────────────────────────── */
+[data-testid="stColumn"]:has(.zn-hero)     { position: relative; z-index: 10; }
+[data-testid="stColumn"]:has(.fp-container){ position: relative; z-index: 20; }
 
 /* Logo area */
 .zn-logo-area {
@@ -451,7 +459,7 @@ button[data-testid="stBaseButton-segmented_controlActive"] {
     display: flex; flex-direction: column; gap: 0.65rem;
 }
 .fp-pill {
-    display: block; text-align: center;
+    display: block; text-align: center; position: relative; z-index: 20;
     background: rgba(255,255,255,0.12);
     backdrop-filter: blur(18px) brightness(0.40) saturate(0.75);
     -webkit-backdrop-filter: blur(18px) brightness(0.40) saturate(0.75);
@@ -511,6 +519,7 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
     border: 1px solid rgba(22,53,204,0.14); border-radius: 50px;
     font-size: 0.7rem; font-weight: 600; letter-spacing: 0.11em;
     color: #0D1F8A; margin-bottom: 1.5rem; font-family: 'Inter', sans-serif;
+    position: relative; z-index: 20;
 }
 .zn-headline {
     font-size: 3.4rem !important; font-weight: 800 !important;
@@ -663,9 +672,11 @@ st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 # PAGE: Brief  (Zeronode hero layout)
 # ══════════════════════════════════════════════════════════════════════════════
 if page == "Brief":
-    hero_col, gap_col, pills_col = st.columns([4.5, 1, 2.5])
+    # ── Layer 2 (left, z-10) │ Layer 3 (right, z-20 — single container) ─────
+    left_col, _gap, right_col = st.columns([4.5, 0.4, 2.6])
 
-    with hero_col:
+    # ── Layer 2: hero heading + CTA buttons + brief form ─────────────────────
+    with left_col:
         st.markdown("""
         <div class="zn-hero">
           <div class="zn-badge-pill">● WHERE RENDERS BEGIN</div>
@@ -693,28 +704,7 @@ if page == "Brief":
             if st.button("BROWSE IMAGES", key="cta_browse", use_container_width=True):
                 go_to("Browse")
 
-    # Three floating right action pills — frosted glass over blob
-    with pills_col:
-        st.markdown("<div style='padding-top:3.5rem'></div>", unsafe_allow_html=True)
-        st.markdown('''
-<div class="fp-container">
-  <a href="https://pinterest.com" target="_blank" rel="noopener noreferrer" class="fp-pill">
-    ⊕&nbsp;&nbsp;Pinterest
-  </a>
-  <a href="https://www.archdaily.com" target="_blank" rel="noopener noreferrer" class="fp-pill">
-    ⊙&nbsp;&nbsp;Arch Daily
-  </a>
-  <a href="https://www.dezeen.com" target="_blank" rel="noopener noreferrer" class="fp-pill">
-    ◈&nbsp;&nbsp;Dezeen
-  </a>
-</div>
-''', unsafe_allow_html=True)
-
-    # Bottom glass cards
-    st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
-    card_l, _, card_r = st.columns([4.5, 0.4, 2.6])
-
-    with card_l:
+        st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
         st.markdown('<div class="zn-card-label">YOUR BRIEF</div>', unsafe_allow_html=True)
         st.selectbox("template", list(TEMPLATES.keys()), key="template_selector",
                      on_change=on_template_change, label_visibility="collapsed")
@@ -749,7 +739,24 @@ if page == "Brief":
                 else:
                     st.warning("Could not extract brief — try a clearer image or PDF.")
 
-    with card_r:
+    # ── Layer 3: single right-side container — always above the gradient ──────
+    with right_col:
+        st.markdown("<div style='padding-top:3.5rem'></div>", unsafe_allow_html=True)
+        st.markdown('''
+<div class="fp-container">
+  <a href="https://pinterest.com" target="_blank" rel="noopener noreferrer" class="fp-pill">
+    ⊕&nbsp;&nbsp;Pinterest
+  </a>
+  <a href="https://www.archdaily.com" target="_blank" rel="noopener noreferrer" class="fp-pill">
+    ⊙&nbsp;&nbsp;Arch Daily
+  </a>
+  <a href="https://www.dezeen.com" target="_blank" rel="noopener noreferrer" class="fp-pill">
+    ◈&nbsp;&nbsp;Dezeen
+  </a>
+</div>
+''', unsafe_allow_html=True)
+
+        st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
         st.markdown('<div class="zn-card-label">SESSION</div>', unsafe_allow_html=True)
         n_b = len(st.session_state.selected_images)
         n_h = len(st.session_state.history)
