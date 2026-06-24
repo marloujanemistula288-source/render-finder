@@ -19,7 +19,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+client = anthropic.Anthropic(api_key=api_key)
 
 # ── Sidebar: Brief Form ────────────────────────────────────────────────────────
 with st.sidebar:
