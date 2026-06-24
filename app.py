@@ -54,252 +54,316 @@ def search_pexels(query, n=9):
         for p in resp.json().get("photos", [])
     ]
 
-# ── Theme: warm concrete + terracotta palette ──────────────────────────────────
-st.markdown("""
+NOISE = "data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"
+
+# ── Theme: Zeronode-inspired cobalt + cool grey ────────────────────────────────
+st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
 
 /* ── Global ── */
-html, body, [class*="css"] {
-    font-family: 'Space Grotesk', sans-serif;
-}
-.stApp {
-    background-color: #E8E8ED;
-    color: #0C0C12;
-}
+html, body, [class*="css"] {{ font-family: 'Space Grotesk', sans-serif; }}
+.stApp {{ background-color: #E4E4EA; color: #0C0C12; }}
 
 /* ── Sidebar ── */
-[data-testid="stSidebar"] {
-    background-color: #DDDDE6 !important;
-    border-right: 1px solid #C4C4D0;
-}
+[data-testid="stSidebar"] {{
+    background-color: #DADAE2 !important;
+    border-right: 1px solid #BEBECE;
+}}
 [data-testid="stSidebar"] h1,
 [data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3,
 [data-testid="stSidebar"] label,
-[data-testid="stSidebar"] p {
-    color: #0C0C12 !important;
-}
-[data-testid="stSidebarNav"] { display: none; }
+[data-testid="stSidebar"] p {{ color: #0C0C12 !important; }}
+[data-testid="stSidebarNav"] {{ display: none; }}
 
-/* ── Headers ── */
-h1 {
+/* ── Streamlit default headers (keep minimal) ── */
+h1 {{
     font-family: 'Space Grotesk', sans-serif !important;
-    font-size: 2.6rem !important;
+    font-size: 2rem !important;
     color: #0C0C12 !important;
     letter-spacing: -0.03em;
     font-weight: 600 !important;
     text-transform: uppercase;
-}
-h2, h3 {
+}}
+h2, h3 {{
     font-family: 'Space Grotesk', sans-serif !important;
     color: #0C0C12 !important;
     font-weight: 500 !important;
     letter-spacing: -0.01em;
-}
+}}
+
+/* ── Hero card ── */
+.hero-card {{
+    position: relative;
+    border-radius: 20px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+    padding: 2.8rem 2.2rem 2.2rem;
+    min-height: 210px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}}
+.hero-blob {{
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse at 28% 58%, #1533E8 0%, rgba(21,51,232,0.78) 18%, rgba(21,51,232,0.15) 45%, transparent 65%),
+        radial-gradient(ellipse at 76% 22%, rgba(21,51,232,0.3) 0%, transparent 52%),
+        #EEEEF8;
+}}
+.hero-noise {{
+    position: absolute;
+    inset: 0;
+    background-image: url("{NOISE}");
+    opacity: 0.09;
+    pointer-events: none;
+}}
+.hero-content {{ position: relative; z-index: 1; }}
+.hero-pill {{
+    display: inline-block;
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.48);
+    border-radius: 50px;
+    padding: 0.55rem 1.6rem;
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    margin-bottom: 0.55rem;
+}}
+.hero-tagline {{
+    font-size: 0.66rem;
+    color: rgba(255,255,255,0.58);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+}}
 
 /* ── Inputs ── */
-input[type="text"], textarea {
+input[type="text"], textarea {{
     background-color: #FFFFFF !important;
-    border: 1px solid #C4C4D0 !important;
+    border: 1px solid #BEBECE !important;
     border-radius: 50px !important;
     color: #0C0C12 !important;
     font-family: 'Space Grotesk', sans-serif !important;
-}
-input[type="text"]:focus, textarea:focus {
+}}
+textarea {{ border-radius: 14px !important; }}
+input[type="text"]:focus, textarea:focus {{
     border-color: #1533E8 !important;
     box-shadow: 0 0 0 2px rgba(21,51,232,0.12) !important;
-}
+}}
 
-/* ── Select / Dropdown ── */
-[data-testid="stSelectbox"] > div > div {
+/* ── Select ── */
+[data-testid="stSelectbox"] > div > div {{
     background-color: #FFFFFF !important;
-    border: 1px solid #C4C4D0 !important;
+    border: 1px solid #BEBECE !important;
     border-radius: 50px !important;
     color: #0C0C12 !important;
-}
+}}
 
 /* ── Primary buttons ── */
-.stButton > button[kind="primary"] {
+.stButton > button[kind="primary"] {{
     background-color: #1533E8 !important;
     color: #FFFFFF !important;
     border: none !important;
     border-radius: 50px !important;
     font-family: 'Space Grotesk', sans-serif !important;
     font-weight: 500 !important;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
-    font-size: 0.78rem !important;
+    font-size: 0.75rem !important;
     transition: background-color 0.2s;
-}
-.stButton > button[kind="primary"]:hover {
-    background-color: #0F25C4 !important;
-}
+}}
+.stButton > button[kind="primary"]:hover {{ background-color: #0F25C4 !important; }}
 
 /* ── Secondary buttons ── */
-.stButton > button[kind="secondary"] {
+.stButton > button[kind="secondary"] {{
     background-color: transparent !important;
     color: #0C0C12 !important;
     border: 1px solid #1533E8 !important;
     border-radius: 50px !important;
     font-family: 'Space Grotesk', sans-serif !important;
     font-weight: 500 !important;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
-    font-size: 0.78rem !important;
-}
-.stButton > button[kind="secondary"]:hover {
-    background-color: rgba(21,51,232,0.06) !important;
-}
+    font-size: 0.75rem !important;
+}}
+.stButton > button[kind="secondary"]:hover {{ background-color: rgba(21,51,232,0.06) !important; }}
 
 /* ── Download button ── */
-.stDownloadButton > button {
+.stDownloadButton > button {{
     background-color: #0C0C12 !important;
-    color: #E8E8ED !important;
+    color: #E4E4EA !important;
     border: none !important;
     border-radius: 50px !important;
     font-family: 'Space Grotesk', sans-serif !important;
     font-weight: 500 !important;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
-    font-size: 0.78rem !important;
-}
-.stDownloadButton > button:hover {
-    background-color: #1533E8 !important;
-}
+    font-size: 0.75rem !important;
+}}
+.stDownloadButton > button:hover {{ background-color: #1533E8 !important; }}
 
-/* ── Alert boxes ── */
-[data-testid="stAlert"] {
-    border-radius: 12px !important;
-    font-family: 'Space Grotesk', sans-serif !important;
-}
-.stSuccess { background-color: #E6EBFF !important; color: #0A1A8A !important; border-left: 3px solid #1533E8 !important; }
-.stInfo    { background-color: #F0F0F5 !important; color: #0C0C12 !important; border-left: 3px solid #8888AA !important; }
-.stWarning { background-color: #FFF4E6 !important; color: #5A3000 !important; border-left: 3px solid #E88015 !important; }
+/* ── Alerts ── */
+[data-testid="stAlert"] {{ border-radius: 12px !important; font-family: 'Space Grotesk', sans-serif !important; }}
+.stSuccess {{ background-color: #E6EBFF !important; color: #0A1A8A !important; border-left: 3px solid #1533E8 !important; }}
+.stInfo    {{ background-color: #EEEEF5 !important; color: #0C0C12 !important; border-left: 3px solid #8888AA !important; }}
+.stWarning {{ background-color: #FFF4E6 !important; color: #5A3000 !important; border-left: 3px solid #E88015 !important; }}
 
 /* ── Divider ── */
-hr { border-color: #C4C4D0 !important; }
+hr {{ border-color: #BEBECE !important; }}
 
 /* ── Spinner ── */
-.stSpinner > div { border-top-color: #1533E8 !important; }
+.stSpinner > div {{ border-top-color: #1533E8 !important; }}
 
-/* ── Reference link buttons ── */
-.ref-btn {
+/* ── Query card (gradient blob panel) ── */
+.query-card {{
+    position: relative;
+    border: 1px solid #CCCCDA;
+    border-radius: 18px;
+    overflow: hidden;
+    margin-bottom: 1.2rem;
+}}
+.card-blob-area {{
+    position: relative;
+    min-height: 148px;
+    padding: 1.3rem 1.3rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    background:
+        radial-gradient(ellipse at 35% 62%, #1533E8 0%, rgba(21,51,232,0.72) 20%, rgba(21,51,232,0.12) 52%, transparent 68%),
+        radial-gradient(ellipse at 80% 18%, rgba(21,51,232,0.26) 0%, transparent 50%),
+        #EDEDF6;
+}}
+.card-noise {{
+    position: absolute;
+    inset: 0;
+    background-image: url("{NOISE}");
+    opacity: 0.09;
+    pointer-events: none;
+}}
+.card-label {{
+    position: relative;
+    z-index: 1;
+    font-size: 0.58rem;
+    color: rgba(255,255,255,0.62);
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 0.45rem;
+}}
+.card-query-pill {{
+    position: relative;
+    z-index: 1;
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 50px;
+    padding: 0.45rem 1.2rem;
+    color: white;
+    font-size: 0.88rem;
+    font-weight: 500;
+    font-style: italic;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    max-width: 100%;
+    word-break: break-word;
+}}
+.card-content-area {{
+    padding: 0.9rem 1.1rem 1rem;
+    background: white;
+}}
+
+/* ── Preview strip ── */
+.preview-strip {{
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.8rem;
+}}
+.preview-strip img {{
+    width: calc(33.33% - 0.34rem);
+    height: 90px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid #CCCCDA;
+}}
+.preview-placeholder {{
+    width: calc(33.33% - 0.34rem);
+    height: 90px;
+    background: #EEEEF5;
+    border-radius: 8px;
+    border: 1px solid #CCCCDA;
+}}
+.btn-row {{ display: flex; flex-wrap: wrap; gap: 0.3rem; }}
+
+/* ── Platform ref buttons ── */
+.ref-btn {{
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.4rem 1rem;
-    margin: 0.2rem 0.3rem 0.2rem 0;
+    padding: 0.38rem 0.95rem;
+    margin: 0.15rem 0.2rem 0.15rem 0;
     border-radius: 50px;
     text-decoration: none !important;
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 500;
     font-family: 'Space Grotesk', sans-serif;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
     transition: opacity 0.2s;
     border: 1px solid transparent;
-}
-.ref-btn:hover { opacity: 0.72; }
-.btn-pinterest  { background-color: #1533E8; color: #fff !important; }
-.btn-behance    { background-color: #0C0C12; color: #E8E8ED !important; }
-.btn-google     { background-color: #FFFFFF; color: #0C0C12 !important; border: 1px solid #C4C4D0; }
-.btn-archinect  { background-color: #E8E8ED; color: #0C0C12 !important; border: 1px solid #C4C4D0; }
-.btn-arena      { background-color: #1533E8; color: #fff !important; opacity: 0.75; }
-
-/* ── Query card ── */
-.query-card {
-    background: #FFFFFF;
-    border: 1px solid #D4D4DF;
-    border-radius: 16px;
-    padding: 1rem 1.1rem 0.8rem;
-    margin-bottom: 1rem;
-}
-.query-header {
-    display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
-    margin-bottom: 0.7rem;
-}
-.query-label {
-    font-size: 0.68rem;
-    color: #1533E8;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    font-family: 'Space Mono', monospace;
-}
-.query-text {
-    font-size: 0.95rem;
-    color: #0C0C12;
-    font-style: italic;
-}
-.preview-strip {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
-}
-.preview-strip img {
-    width: calc(33.33% - 0.34rem);
-    height: 100px;
-    object-fit: cover;
-    border-radius: 10px;
-    border: 1px solid #D4D4DF;
-}
-.preview-placeholder {
-    width: calc(33.33% - 0.34rem);
-    height: 100px;
-    background: #E8E8ED;
-    border-radius: 10px;
-    border: 1px solid #D4D4DF;
-}
-.btn-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-}
+}}
+.ref-btn:hover {{ opacity: 0.68; }}
+.btn-pinterest {{ background-color: #1533E8; color: #fff !important; }}
+.btn-behance   {{ background-color: #0C0C12; color: #E4E4EA !important; }}
+.btn-google    {{ background-color: #F0F0F8; color: #0C0C12 !important; border: 1px solid #BEBECE; }}
+.btn-archinect {{ background-color: #E4E4EA; color: #0C0C12 !important; border: 1px solid #BEBECE; }}
+.btn-arena     {{ background-color: rgba(21,51,232,0.1); color: #1533E8 !important; border: 1px solid rgba(21,51,232,0.22); }}
 
 /* ── Image badge ── */
-.badge {
+.badge {{
     display: inline-block;
-    padding: 0.12rem 0.55rem;
+    padding: 0.1rem 0.5rem;
     border-radius: 50px;
-    font-size: 0.62rem;
+    font-size: 0.6rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-}
-.badge-unsplash { background: #0C0C12; color: #E8E8ED; }
-.badge-pexels   { background: #1533E8; color: #fff; }
-
-/* ── Subtitle ── */
-.subtitle {
-    font-size: 0.8rem;
-    color: #6B6B80;
-    margin-top: -0.8rem;
-    margin-bottom: 1.5rem;
-    font-weight: 400;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
+}}
+.badge-unsplash {{ background: #0C0C12; color: #E4E4EA; }}
+.badge-pexels   {{ background: #1533E8; color: #fff; }}
 
 /* ── Section label ── */
-.section-tag {
-    font-size: 0.65rem;
-    letter-spacing: 0.18em;
+.section-tag {{
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
     color: #1533E8;
     font-weight: 700;
     margin-bottom: 0.2rem;
     font-family: 'Space Mono', monospace;
-}
+}}
 </style>
 """, unsafe_allow_html=True)
 
 # ── Header ─────────────────────────────────────────────────────────────────────
-st.markdown("<div class='section-tag'>Tool</div>", unsafe_allow_html=True)
-st.title("Render Finder")
-st.markdown("<div class='subtitle'>AI-powered image curation for Photoshop renders</div>", unsafe_allow_html=True)
+st.markdown(f"""
+<div class="hero-card">
+    <div class="hero-blob"></div>
+    <div class="hero-noise"></div>
+    <div class="hero-content">
+        <div class="hero-pill">Render Finder</div>
+        <div class="hero-tagline">AI-powered image curation for Photoshop renders</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -349,14 +413,12 @@ if find_btn:
             archinect_url = f"https://archinect.com/search#/?q={enc}&type=photos"
             arena_url     = f"https://www.are.na/search/{enc}"
 
-            # Fetch 3 preview images from Unsplash then Pexels
             previews = []
             if has_preview_keys:
                 previews = search_unsplash(query_text, n=3)
                 if len(previews) < 3:
                     previews += search_pexels(query_text, n=3 - len(previews))
 
-            # Build preview strip HTML
             if previews:
                 strip_html = '<div class="preview-strip">' + "".join(
                     f'<a href="{p["link"]}" target="_blank" rel="noopener">'
@@ -372,17 +434,20 @@ if find_btn:
 
             card_html = f"""
             <div class="query-card">
-                <div class="query-header">
-                    <span class="query-label">Query {i}</span>
-                    <span class="query-text">{query_text}</span>
+                <div class="card-blob-area">
+                    <div class="card-noise"></div>
+                    <div class="card-label">Query {i}</div>
+                    <div class="card-query-pill">{query_text}</div>
                 </div>
-                {strip_html}
-                <div class="btn-row">
-                    <a class="ref-btn btn-pinterest" href="{pinterest_url}" target="_blank" rel="noopener">Pinterest</a>
-                    <a class="ref-btn btn-behance"   href="{behance_url}"   target="_blank" rel="noopener">Behance</a>
-                    <a class="ref-btn btn-google"    href="{google_url}"    target="_blank" rel="noopener">Google Images</a>
-                    <a class="ref-btn btn-archinect" href="{archinect_url}" target="_blank" rel="noopener">Archinect</a>
-                    <a class="ref-btn btn-arena"     href="{arena_url}"     target="_blank" rel="noopener">Are.na</a>
+                <div class="card-content-area">
+                    {strip_html}
+                    <div class="btn-row">
+                        <a class="ref-btn btn-pinterest" href="{pinterest_url}" target="_blank" rel="noopener">Pinterest</a>
+                        <a class="ref-btn btn-behance"   href="{behance_url}"   target="_blank" rel="noopener">Behance</a>
+                        <a class="ref-btn btn-google"    href="{google_url}"    target="_blank" rel="noopener">Google Images</a>
+                        <a class="ref-btn btn-archinect" href="{archinect_url}" target="_blank" rel="noopener">Archinect</a>
+                        <a class="ref-btn btn-arena"     href="{arena_url}"     target="_blank" rel="noopener">Are.na</a>
+                    </div>
                 </div>
             </div>"""
             st.markdown(card_html, unsafe_allow_html=True)
@@ -421,7 +486,7 @@ if browse_btn:
                         st.markdown(
                             f'<span class="badge {badge_class}">{badge_label}</span> '
                             f'<a href="{img["link"]}" target="_blank" '
-                            f'style="font-size:0.78rem;color:#7A6E68;text-decoration:none;">'
+                            f'style="font-size:0.78rem;color:#6B6B80;text-decoration:none;">'
                             f'{img["author"]}</a>',
                             unsafe_allow_html=True,
                         )
@@ -435,7 +500,7 @@ st.divider()
 st.markdown("<div class='section-tag'>03 — Filter</div>", unsafe_allow_html=True)
 st.header("Filter Images")
 st.markdown(
-    "<p style='color:#7A6E68; font-size:0.9rem; margin-top:-0.5rem;'>"
+    "<p style='color:#6B6B80; font-size:0.88rem; margin-top:-0.5rem; letter-spacing:0.01em;'>"
     "Paste image URLs (one per line) — Claude will score each for render-readiness.</p>",
     unsafe_allow_html=True,
 )
