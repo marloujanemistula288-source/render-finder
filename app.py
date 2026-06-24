@@ -266,18 +266,24 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
 /* App background */
 .stApp { background-color: #F4F5FA; min-height: 100vh; }
 
-/* Blue blob — heavily blurred organic shape, grain is a separate element */
+/* Clip container — fixed, starts just below the nav row so blur never bleeds into the topbar */
+.zn-blob-clip {
+    position: fixed; top: 185px; left: 0; right: 0; bottom: 0;
+    overflow: hidden;
+    pointer-events: none; z-index: 1;
+}
+/* Blue blob — absolute within the clip; top:0 = blob starts at the clip boundary */
 .zn-blob {
-    position: fixed; top: -18%; right: -18%;
-    width: 74vw; height: 132vh;
+    position: absolute; top: 0; right: -10%;
+    width: 66vw; height: 118vh;
     background:
-        radial-gradient(ellipse 55% 62% at 58% 22%, #0B1DCC 0%, #1325DD 16%, transparent 62%),
-        radial-gradient(ellipse 62% 78% at 66% 58%, #0E20D8 0%, #0B1DCC 24%, transparent 70%),
-        radial-gradient(ellipse 46% 52% at 72% 82%, #0916B8 0%, transparent 58%),
-        radial-gradient(ellipse 88% 96% at 63% 50%, rgba(10,24,200,0.42) 0%, transparent 72%);
+        radial-gradient(ellipse 55% 62% at 60% 18%, #0B1DCC 0%, #1325DD 16%, transparent 60%),
+        radial-gradient(ellipse 62% 78% at 66% 54%, #0E20D8 0%, #0B1DCC 24%, transparent 70%),
+        radial-gradient(ellipse 46% 52% at 74% 80%, #0916B8 0%, transparent 58%),
+        radial-gradient(ellipse 88% 96% at 64% 46%, rgba(10,24,200,0.42) 0%, transparent 72%);
     border-radius: 42% 58% 50% 50% / 48% 44% 60% 52%;
     filter: blur(72px);
-    pointer-events: none; z-index: 1;
+    pointer-events: none;
 }
 .zn-blob::before {
     content: ''; position: absolute; inset: -5%;
@@ -349,17 +355,17 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
     border-radius: 0 !important;
     background: transparent !important;
     border: none !important;
-    color: #5A6BAA !important;
-    font-size: 0.72rem !important;
+    color: #7A89BB !important;
+    font-size: 0.74rem !important;
     font-weight: 500 !important;
-    letter-spacing: 0.12em !important;
+    letter-spacing: 0.13em !important;
     text-transform: uppercase !important;
-    padding: 0.4rem 1.1rem !important;
+    padding: 0.5rem 1.6rem !important;
     height: auto !important;
-    min-height: 36px !important;
+    min-height: 40px !important;
     box-shadow: none !important;
     margin: 0 !important;
-    transition: color 0.15s !important;
+    transition: color 0.18s !important;
 }
 [data-testid="stSegmentedControl"] button:hover {
     background: transparent !important;
@@ -423,23 +429,25 @@ button[data-testid="stBaseButton-segmented_controlActive"] {
 
 /* ── Floating pills — data-testid is ON the button itself; comes after secondary rule ── */
 [data-testid="stColumn"]:has(.fp-container) button[data-testid^="stBaseButton"] {
-    background: rgba(255,255,255,0.14) !important;
-    border: 1px solid rgba(255,255,255,0.40) !important;
+    background: rgba(255,255,255,0.12) !important;
+    backdrop-filter: blur(18px) brightness(0.40) saturate(0.75) !important;
+    -webkit-backdrop-filter: blur(18px) brightness(0.40) saturate(0.75) !important;
+    border: 1.5px solid rgba(255,255,255,0.50) !important;
     border-radius: 50px !important;
-    color: rgba(255,255,255,0.96) !important;
-    font-size: 0.88rem !important;
+    color: #FFFFFF !important;
+    font-size: 0.92rem !important;
     font-weight: 500 !important;
-    letter-spacing: 0.03em !important;
+    letter-spacing: 0.02em !important;
     text-transform: none !important;
-    padding: 0.78rem 1.55rem !important;
-    box-shadow: 0 4px 28px rgba(0,0,30,0.22), inset 0 1px 0 rgba(255,255,255,0.22) !important;
+    padding: 0.85rem 1.6rem !important;
+    box-shadow: 0 4px 32px rgba(0,0,40,0.28), inset 0 1px 0 rgba(255,255,255,0.25) !important;
     width: 100% !important;
     transition: all 0.2s !important;
 }
 [data-testid="stColumn"]:has(.fp-container) button[data-testid^="stBaseButton"]:hover {
-    background: rgba(255,255,255,0.24) !important;
+    background: rgba(255,255,255,0.22) !important;
     transform: translateY(-2px) !important;
-    box-shadow: 0 10px 40px rgba(0,0,30,0.28), inset 0 1px 0 rgba(255,255,255,0.30) !important;
+    box-shadow: 0 12px 44px rgba(0,0,40,0.32), inset 0 1px 0 rgba(255,255,255,0.45) !important;
 }
 
 /* ── Inputs ── */
@@ -586,7 +594,7 @@ hr { border-color:rgba(13,31,138,0.09) !important; }
 # ══════════════════════════════════════════════════════════════════════════════
 # Background
 # ══════════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="zn-blob" aria-hidden="true"></div>'
+st.markdown('<div class="zn-blob-clip"><div class="zn-blob" aria-hidden="true"></div></div>'
             '<div class="zn-grain" aria-hidden="true"></div>'
             '<div class="zn-bottom-fade" aria-hidden="true"></div>',
             unsafe_allow_html=True)
