@@ -57,149 +57,161 @@ def search_pexels(query, n=9):
 # ── Theme: warm concrete + terracotta palette ──────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Serif+Display&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
 
 /* ── Global ── */
 html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Space Grotesk', sans-serif;
 }
 .stApp {
-    background-color: #EDE8E1;
-    color: #2C2520;
+    background-color: #E8E8ED;
+    color: #0C0C12;
 }
 
 /* ── Sidebar ── */
 [data-testid="stSidebar"] {
-    background-color: #E0D8CF !important;
-    border-right: 1px solid #C8BFB5;
+    background-color: #DDDDE6 !important;
+    border-right: 1px solid #C4C4D0;
 }
 [data-testid="stSidebar"] h1,
 [data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3,
 [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] p {
-    color: #2C2520 !important;
+    color: #0C0C12 !important;
 }
 [data-testid="stSidebarNav"] { display: none; }
 
 /* ── Headers ── */
 h1 {
-    font-family: 'DM Serif Display', serif !important;
+    font-family: 'Space Grotesk', sans-serif !important;
     font-size: 2.6rem !important;
-    color: #2C2520 !important;
-    letter-spacing: -0.02em;
-    font-weight: 400 !important;
+    color: #0C0C12 !important;
+    letter-spacing: -0.03em;
+    font-weight: 600 !important;
+    text-transform: uppercase;
 }
 h2, h3 {
-    font-family: 'DM Serif Display', serif !important;
-    color: #2C2520 !important;
-    font-weight: 400 !important;
+    font-family: 'Space Grotesk', sans-serif !important;
+    color: #0C0C12 !important;
+    font-weight: 500 !important;
     letter-spacing: -0.01em;
 }
 
 /* ── Inputs ── */
 input[type="text"], textarea {
-    background-color: #F5F0EA !important;
-    border: 1px solid #C8BFB5 !important;
-    border-radius: 6px !important;
-    color: #2C2520 !important;
-    font-family: 'DM Sans', sans-serif !important;
+    background-color: #FFFFFF !important;
+    border: 1px solid #C4C4D0 !important;
+    border-radius: 50px !important;
+    color: #0C0C12 !important;
+    font-family: 'Space Grotesk', sans-serif !important;
 }
 input[type="text"]:focus, textarea:focus {
-    border-color: #B5634A !important;
-    box-shadow: 0 0 0 2px rgba(181,99,74,0.15) !important;
+    border-color: #1533E8 !important;
+    box-shadow: 0 0 0 2px rgba(21,51,232,0.12) !important;
 }
 
 /* ── Select / Dropdown ── */
 [data-testid="stSelectbox"] > div > div {
-    background-color: #F5F0EA !important;
-    border: 1px solid #C8BFB5 !important;
-    border-radius: 6px !important;
-    color: #2C2520 !important;
+    background-color: #FFFFFF !important;
+    border: 1px solid #C4C4D0 !important;
+    border-radius: 50px !important;
+    color: #0C0C12 !important;
 }
 
 /* ── Primary buttons ── */
 .stButton > button[kind="primary"] {
-    background-color: #B5634A !important;
-    color: #F5F0EA !important;
+    background-color: #1533E8 !important;
+    color: #FFFFFF !important;
     border: none !important;
-    border-radius: 6px !important;
-    font-family: 'DM Sans', sans-serif !important;
+    border-radius: 50px !important;
+    font-family: 'Space Grotesk', sans-serif !important;
     font-weight: 500 !important;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 0.78rem !important;
     transition: background-color 0.2s;
 }
 .stButton > button[kind="primary"]:hover {
-    background-color: #9A5038 !important;
+    background-color: #0F25C4 !important;
 }
 
 /* ── Secondary buttons ── */
 .stButton > button[kind="secondary"] {
     background-color: transparent !important;
-    color: #2C2520 !important;
-    border: 1px solid #B5634A !important;
-    border-radius: 6px !important;
-    font-family: 'DM Sans', sans-serif !important;
+    color: #0C0C12 !important;
+    border: 1px solid #1533E8 !important;
+    border-radius: 50px !important;
+    font-family: 'Space Grotesk', sans-serif !important;
     font-weight: 500 !important;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 0.78rem !important;
 }
 .stButton > button[kind="secondary"]:hover {
-    background-color: #B5634A22 !important;
+    background-color: rgba(21,51,232,0.06) !important;
 }
 
 /* ── Download button ── */
 .stDownloadButton > button {
-    background-color: #7D9178 !important;
-    color: #fff !important;
+    background-color: #0C0C12 !important;
+    color: #E8E8ED !important;
     border: none !important;
-    border-radius: 6px !important;
-    font-family: 'DM Sans', sans-serif !important;
+    border-radius: 50px !important;
+    font-family: 'Space Grotesk', sans-serif !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 0.78rem !important;
 }
 .stDownloadButton > button:hover {
-    background-color: #667A62 !important;
+    background-color: #1533E8 !important;
 }
 
 /* ── Alert boxes ── */
 [data-testid="stAlert"] {
-    border-radius: 8px !important;
-    font-family: 'DM Sans', sans-serif !important;
+    border-radius: 12px !important;
+    font-family: 'Space Grotesk', sans-serif !important;
 }
-.stSuccess { background-color: #D8E5D5 !important; color: #2C3D28 !important; border-left: 4px solid #7D9178 !important; }
-.stInfo    { background-color: #E8E4DE !important; color: #2C2520 !important; border-left: 4px solid #A09489 !important; }
-.stWarning { background-color: #F0E4D8 !important; color: #3D2515 !important; border-left: 4px solid #B5634A !important; }
+.stSuccess { background-color: #E6EBFF !important; color: #0A1A8A !important; border-left: 3px solid #1533E8 !important; }
+.stInfo    { background-color: #F0F0F5 !important; color: #0C0C12 !important; border-left: 3px solid #8888AA !important; }
+.stWarning { background-color: #FFF4E6 !important; color: #5A3000 !important; border-left: 3px solid #E88015 !important; }
 
 /* ── Divider ── */
-hr { border-color: #C8BFB5 !important; }
+hr { border-color: #C4C4D0 !important; }
 
 /* ── Spinner ── */
-.stSpinner > div { border-top-color: #B5634A !important; }
+.stSpinner > div { border-top-color: #1533E8 !important; }
 
 /* ── Reference link buttons ── */
 .ref-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.5rem 1.1rem;
+    padding: 0.4rem 1rem;
     margin: 0.2rem 0.3rem 0.2rem 0;
-    border-radius: 6px;
+    border-radius: 50px;
     text-decoration: none !important;
-    font-size: 0.82rem;
+    font-size: 0.72rem;
     font-weight: 500;
-    font-family: 'DM Sans', sans-serif;
-    letter-spacing: 0.02em;
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     transition: opacity 0.2s;
+    border: 1px solid transparent;
 }
-.ref-btn:hover { opacity: 0.82; }
-.btn-pinterest  { background-color: #B5634A; color: #fff !important; }
-.btn-behance    { background-color: #1769FF; color: #fff !important; }
-.btn-google     { background-color: #F5F0EA; color: #2C2520 !important; border: 1px solid #C8BFB5; }
-.btn-archinect  { background-color: #2C2520; color: #EDE8E1 !important; }
-.btn-arena      { background-color: #7D9178; color: #fff !important; }
+.ref-btn:hover { opacity: 0.72; }
+.btn-pinterest  { background-color: #1533E8; color: #fff !important; }
+.btn-behance    { background-color: #0C0C12; color: #E8E8ED !important; }
+.btn-google     { background-color: #FFFFFF; color: #0C0C12 !important; border: 1px solid #C4C4D0; }
+.btn-archinect  { background-color: #E8E8ED; color: #0C0C12 !important; border: 1px solid #C4C4D0; }
+.btn-arena      { background-color: #1533E8; color: #fff !important; opacity: 0.75; }
 
 /* ── Query card ── */
 .query-card {
-    background: #F5F0EA;
-    border: 1px solid #D5CCC5;
-    border-radius: 10px;
+    background: #FFFFFF;
+    border: 1px solid #D4D4DF;
+    border-radius: 16px;
     padding: 1rem 1.1rem 0.8rem;
     margin-bottom: 1rem;
 }
@@ -210,15 +222,16 @@ hr { border-color: #C8BFB5 !important; }
     margin-bottom: 0.7rem;
 }
 .query-label {
-    font-size: 0.75rem;
-    color: #B5634A;
+    font-size: 0.68rem;
+    color: #1533E8;
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
 }
 .query-text {
     font-size: 0.95rem;
-    color: #2C2520;
+    color: #0C0C12;
     font-style: italic;
 }
 .preview-strip {
@@ -230,15 +243,15 @@ hr { border-color: #C8BFB5 !important; }
     width: calc(33.33% - 0.34rem);
     height: 100px;
     object-fit: cover;
-    border-radius: 6px;
-    border: 1px solid #C8BFB5;
+    border-radius: 10px;
+    border: 1px solid #D4D4DF;
 }
 .preview-placeholder {
     width: calc(33.33% - 0.34rem);
     height: 100px;
-    background: #E0D8CF;
-    border-radius: 6px;
-    border: 1px solid #C8BFB5;
+    background: #E8E8ED;
+    border-radius: 10px;
+    border: 1px solid #D4D4DF;
 }
 .btn-row {
     display: flex;
@@ -249,34 +262,36 @@ hr { border-color: #C8BFB5 !important; }
 /* ── Image badge ── */
 .badge {
     display: inline-block;
-    padding: 0.12rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.68rem;
+    padding: 0.12rem 0.55rem;
+    border-radius: 50px;
+    font-size: 0.62rem;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
 }
-.badge-unsplash { background: #2C2520; color: #EDE8E1; }
-.badge-pexels   { background: #7D9178; color: #fff; }
+.badge-unsplash { background: #0C0C12; color: #E8E8ED; }
+.badge-pexels   { background: #1533E8; color: #fff; }
 
 /* ── Subtitle ── */
 .subtitle {
-    font-size: 1rem;
-    color: #7A6E68;
+    font-size: 0.8rem;
+    color: #6B6B80;
     margin-top: -0.8rem;
     margin-bottom: 1.5rem;
-    font-weight: 300;
-    letter-spacing: 0.01em;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 /* ── Section label ── */
 .section-tag {
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
+    font-size: 0.65rem;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: #B5634A;
-    font-weight: 500;
+    color: #1533E8;
+    font-weight: 700;
     margin-bottom: 0.2rem;
+    font-family: 'Space Mono', monospace;
 }
 </style>
 """, unsafe_allow_html=True)
