@@ -17,6 +17,43 @@ def get_secret(key):
 
 client = anthropic.Anthropic(api_key=get_secret("ANTHROPIC_API_KEY"))
 
+# ── Image search helpers ───────────────────────────────────────────────────────
+def search_unsplash(query, n=9):
+    key = get_secret("UNSPLASH_ACCESS_KEY")
+    if not key:
+        return []
+    resp = requests.get(
+        "https://api.unsplash.com/search/photos",
+        params={"query": query, "per_page": n, "orientation": "landscape"},
+        headers={"Authorization": f"Client-ID {key}"},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        return []
+    return [
+        {"thumb": p["urls"]["small"], "link": p["links"]["html"],
+         "author": p["user"]["name"], "source": "unsplash"}
+        for p in resp.json().get("results", [])
+    ]
+
+def search_pexels(query, n=9):
+    key = get_secret("PEXELS_API_KEY")
+    if not key:
+        return []
+    resp = requests.get(
+        "https://api.pexels.com/v1/search",
+        params={"query": query, "per_page": n, "orientation": "landscape"},
+        headers={"Authorization": key},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        return []
+    return [
+        {"thumb": p["src"]["medium"], "link": p["url"],
+         "author": p["photographer"], "source": "pexels"}
+        for p in resp.json().get("photos", [])
+    ]
+
 # ── Theme: warm concrete + terracotta palette ──────────────────────────────────
 st.markdown("""
 <style>
@@ -158,27 +195,55 @@ hr { border-color: #C8BFB5 !important; }
 .btn-archinect  { background-color: #2C2520; color: #EDE8E1 !important; }
 .btn-arena      { background-color: #7D9178; color: #fff !important; }
 
-/* ── Query row ── */
-.query-row {
+/* ── Query card ── */
+.query-card {
+    background: #F5F0EA;
+    border: 1px solid #D5CCC5;
+    border-radius: 10px;
+    padding: 1rem 1.1rem 0.8rem;
+    margin-bottom: 1rem;
+}
+.query-header {
     display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-    padding: 0.6rem 0;
-    border-bottom: 1px solid #D5CCC5;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.7rem;
 }
 .query-label {
-    font-size: 0.85rem;
-    color: #7A6E68;
-    min-width: 1.4rem;
-    font-weight: 300;
+    font-size: 0.75rem;
+    color: #B5634A;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 .query-text {
-    font-size: 0.92rem;
+    font-size: 0.95rem;
     color: #2C2520;
-    flex: 1;
-    min-width: 160px;
     font-style: italic;
+}
+.preview-strip {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+.preview-strip img {
+    width: calc(33.33% - 0.34rem);
+    height: 100px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid #C8BFB5;
+}
+.preview-placeholder {
+    width: calc(33.33% - 0.34rem);
+    height: 100px;
+    background: #E0D8CF;
+    border-radius: 6px;
+    border: 1px solid #C8BFB5;
+}
+.btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
 }
 
 /* ── Image badge ── */
@@ -257,72 +322,65 @@ if find_btn:
         raw = response.content[0].text.strip()
         lines = [l.strip() for l in raw.splitlines() if l.strip()]
 
-        rows_html = ""
+        has_preview_keys = bool(get_secret("UNSPLASH_ACCESS_KEY") or get_secret("PEXELS_API_KEY"))
+
         for i, line in enumerate(lines, 1):
             query_text = line.lstrip("0123456789. ").strip('"')
             enc = urllib.parse.quote_plus(query_text)
 
-            pinterest_url  = f"https://www.pinterest.com/search/pins/?q={enc}"
-            behance_url    = f"https://www.behance.net/search/projects?search={enc}"
-            google_url     = f"https://www.google.com/search?tbm=isch&q={enc}"
-            archinect_url  = f"https://archinect.com/search#/?q={enc}&type=photos"
-            arena_url      = f"https://www.are.na/search/{enc}"
+            pinterest_url = f"https://www.pinterest.com/search/pins/?q={enc}"
+            behance_url   = f"https://www.behance.net/search/projects?search={enc}"
+            google_url    = f"https://www.google.com/search?tbm=isch&q={enc}"
+            archinect_url = f"https://archinect.com/search#/?q={enc}&type=photos"
+            arena_url     = f"https://www.are.na/search/{enc}"
 
-            rows_html += f"""
-            <div class="query-row">
-                <span class="query-label">{i}.</span>
-                <span class="query-text">{query_text}</span>
-                <a class="ref-btn btn-pinterest"  href="{pinterest_url}"  target="_blank" rel="noopener">Pinterest</a>
-                <a class="ref-btn btn-behance"    href="{behance_url}"    target="_blank" rel="noopener">Behance</a>
-                <a class="ref-btn btn-google"     href="{google_url}"     target="_blank" rel="noopener">Google Images</a>
-                <a class="ref-btn btn-archinect"  href="{archinect_url}"  target="_blank" rel="noopener">Archinect</a>
-                <a class="ref-btn btn-arena"      href="{arena_url}"      target="_blank" rel="noopener">Are.na</a>
+            # Fetch 3 preview images from Unsplash then Pexels
+            previews = []
+            if has_preview_keys:
+                previews = search_unsplash(query_text, n=3)
+                if len(previews) < 3:
+                    previews += search_pexels(query_text, n=3 - len(previews))
+
+            # Build preview strip HTML
+            if previews:
+                strip_html = '<div class="preview-strip">' + "".join(
+                    f'<a href="{p["link"]}" target="_blank" rel="noopener">'
+                    f'<img src="{p["thumb"]}" alt="{p["author"]}"></a>'
+                    for p in previews[:3]
+                ) + "</div>"
+            elif has_preview_keys:
+                strip_html = '<div class="preview-strip">' + ''.join(
+                    '<div class="preview-placeholder"></div>' for _ in range(3)
+                ) + "</div>"
+            else:
+                strip_html = ""
+
+            card_html = f"""
+            <div class="query-card">
+                <div class="query-header">
+                    <span class="query-label">Query {i}</span>
+                    <span class="query-text">{query_text}</span>
+                </div>
+                {strip_html}
+                <div class="btn-row">
+                    <a class="ref-btn btn-pinterest" href="{pinterest_url}" target="_blank" rel="noopener">Pinterest</a>
+                    <a class="ref-btn btn-behance"   href="{behance_url}"   target="_blank" rel="noopener">Behance</a>
+                    <a class="ref-btn btn-google"    href="{google_url}"    target="_blank" rel="noopener">Google Images</a>
+                    <a class="ref-btn btn-archinect" href="{archinect_url}" target="_blank" rel="noopener">Archinect</a>
+                    <a class="ref-btn btn-arena"     href="{arena_url}"     target="_blank" rel="noopener">Are.na</a>
+                </div>
             </div>"""
+            st.markdown(card_html, unsafe_allow_html=True)
 
-        st.markdown(rows_html, unsafe_allow_html=True)
-        st.success(f"{len(lines)} queries generated — open on any platform.")
+        if not has_preview_keys:
+            st.info("Add **UNSPLASH_ACCESS_KEY** or **PEXELS_API_KEY** to your secrets to see image previews.")
+        st.success(f"{len(lines)} queries generated — click any image or platform button to explore.")
 else:
     st.info("Fill in the brief and click **Find References** to generate search queries.")
 
 st.divider()
 
 # ── Section 2: Browse Images ───────────────────────────────────────────────────
-def search_unsplash(query, n=9):
-    key = get_secret("UNSPLASH_ACCESS_KEY")
-    if not key:
-        return []
-    resp = requests.get(
-        "https://api.unsplash.com/search/photos",
-        params={"query": query, "per_page": n, "orientation": "landscape"},
-        headers={"Authorization": f"Client-ID {key}"},
-        timeout=10,
-    )
-    if resp.status_code != 200:
-        return []
-    return [
-        {"thumb": p["urls"]["small"], "link": p["links"]["html"],
-         "author": p["user"]["name"], "source": "unsplash"}
-        for p in resp.json().get("results", [])
-    ]
-
-def search_pexels(query, n=9):
-    key = get_secret("PEXELS_API_KEY")
-    if not key:
-        return []
-    resp = requests.get(
-        "https://api.pexels.com/v1/search",
-        params={"query": query, "per_page": n, "orientation": "landscape"},
-        headers={"Authorization": key},
-        timeout=10,
-    )
-    if resp.status_code != 200:
-        return []
-    return [
-        {"thumb": p["src"]["medium"], "link": p["url"],
-         "author": p["photographer"], "source": "pexels"}
-        for p in resp.json().get("photos", [])
-    ]
-
 st.markdown("<div class='section-tag'>02 — Browse</div>", unsafe_allow_html=True)
 st.header("Browse Reference Images")
 
