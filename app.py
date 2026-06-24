@@ -18,19 +18,18 @@ _defaults = {
     "brief_space": "", "brief_style": "Dreamy",
     "brief_mood": "", "brief_background": "White/Isolated",
     "template_selector": "— Choose a template —",
-    "nav_pills": "Brief",
 }
 for k, v in _defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-# ── Constants ──────────────────────────────────────────────────────────────────
-STYLE_OPTIONS  = ["Dreamy", "Dark Moody", "Minimal", "Maximalist", "Realistic CGI"]
-BG_OPTIONS     = ["White/Isolated", "Scene", "Any"]
-FILTER_SPACES  = ["Living Room","Bedroom","Kitchen","Office","Courtyard","Exterior","Dining Room","Studio","Bathroom","Hallway"]
-FILTER_STYLES  = ["Dreamy","Minimal","Dark Moody","Maximalist","Brutalist","Japandi","Bohemian","Industrial","Coastal","Rustic"]
-FILTER_MOODS   = ["Warm","Cool","Cozy","Editorial","Raw","Airy","Dramatic","Serene","Earthy","Luxe"]
-FILTER_LIGHTS  = ["Natural Light","Golden Hour","Night Scene","Overcast","Candlelight","Diffused","Artificial"]
+PAGES = ["Brief", "Search", "Browse", "Palette", "Board", "Prompt"]
+STYLE_OPTIONS = ["Dreamy", "Dark Moody", "Minimal", "Maximalist", "Realistic CGI"]
+BG_OPTIONS    = ["White/Isolated", "Scene", "Any"]
+FILTER_SPACES = ["Living Room","Bedroom","Kitchen","Office","Courtyard","Exterior","Dining Room","Studio","Bathroom"]
+FILTER_STYLES = ["Dreamy","Minimal","Dark Moody","Maximalist","Brutalist","Japandi","Bohemian","Industrial","Coastal"]
+FILTER_MOODS  = ["Warm","Cool","Cozy","Editorial","Raw","Airy","Dramatic","Serene","Earthy","Luxe"]
+FILTER_LIGHTS = ["Natural Light","Golden Hour","Night Scene","Overcast","Candlelight","Diffused","Artificial"]
 TEMPLATES = {
     "— Choose a template —": None,
     "Warm Scandinavian Interior": {"space":"living room","style":"Minimal","mood":"warm, hygge, soft diffused light","background":"Scene"},
@@ -41,17 +40,20 @@ TEMPLATES = {
     "Warm Terracotta Bedroom":    {"space":"bedroom","style":"Dreamy","mood":"earthy, cozy, Mediterranean warmth","background":"Scene"},
     "Brutalist Office Lobby":     {"space":"office lobby","style":"Realistic CGI","mood":"monumental, raw concrete, dramatic","background":"Scene"},
 }
-STOP_WORDS = {
-    "a","an","the","and","or","for","with","in","on","at","to","of","from","by","as","is",
-    "are","that","this","be","was","were","it","its","interior","design","photography",
-    "photo","image","render","photoshop","reference","style","space","mood","background",
-    "high","end","modern","contemporary","architectural","architecture","inspired","using",
-}
+STOP_WORDS = {"a","an","the","and","or","for","with","in","on","at","to","of","from","by","as","is","are","that","this","be","was","were","it","its","interior","design","photography","photo","image","render","photoshop","reference","style","space","mood","background","high","end","modern","contemporary","architectural","architecture"}
 
 def get_secret(k):
     return st.secrets.get(k) or os.getenv(k)
 
 client = anthropic.Anthropic(api_key=get_secret("ANTHROPIC_API_KEY"))
+
+# ── Navigation via query params ────────────────────────────────────────────────
+page = st.query_params.get("page", "Brief")
+if page not in PAGES:
+    page = "Brief"
+
+def go_to(p):
+    st.query_params["page"] = p
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def search_unsplash(query, n=9):
@@ -108,612 +110,734 @@ def extract_keywords(texts):
     return [w for w, _ in Counter(w for w in words if w not in STOP_WORDS).most_common(14)]
 
 def on_template_change():
-    choice = st.session_state.template_selector
-    if choice != "— Choose a template —" and TEMPLATES.get(choice):
-        t = TEMPLATES[choice]
+    c = st.session_state.template_selector
+    if c != "— Choose a template —" and TEMPLATES.get(c):
+        t = TEMPLATES[c]
         st.session_state.brief_space      = t["space"]
         st.session_state.brief_style      = t["style"]
         st.session_state.brief_mood       = t["mood"]
         st.session_state.brief_background = t["background"]
         st.session_state.template_selector = "— Choose a template —"
 
-def go_to(page):
-    st.session_state.nav_pills = page
-    st.rerun()
-
 def render_image_grid(images, key_prefix="img"):
     cols3 = st.columns(3)
     for i, img in enumerate(images):
-        badge_cls = "badge-unsplash" if img["source"] == "unsplash" else "badge-pexels"
-        badge_lbl = "Unsplash"       if img["source"] == "unsplash" else "Pexels"
-        already_board   = any(x["thumb"] == img["thumb"] for x in st.session_state.selected_images)
-        already_compare = any(x["thumb"] == img["thumb"] for x in st.session_state.comparison_images)
+        bc = "badge-unsplash" if img["source"] == "unsplash" else "badge-pexels"
+        bl = "Unsplash"       if img["source"] == "unsplash" else "Pexels"
+        on_board   = any(x["thumb"] == img["thumb"] for x in st.session_state.selected_images)
+        on_compare = any(x["thumb"] == img["thumb"] for x in st.session_state.comparison_images)
         with cols3[i % 3]:
             st.image(img["thumb"], use_container_width=True)
-            st.markdown(
-                f'<span class="badge {badge_cls}">{badge_lbl}</span> '
-                f'<a href="{img["link"]}" target="_blank" '
-                f'style="font-size:0.75rem;color:#3D5299;text-decoration:none;">'
-                f'{img["author"]}</a>', unsafe_allow_html=True)
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("✓ Board" if already_board else "+ Board",
-                             key=f"{key_prefix}_board_{i}", use_container_width=True):
-                    if not already_board:
-                        st.session_state.selected_images.append(img)
-                    else:
-                        st.session_state.selected_images = [
-                            x for x in st.session_state.selected_images if x["thumb"] != img["thumb"]]
+            st.markdown(f'<span class="badge {bc}">{bl}</span> '
+                        f'<a href="{img["link"]}" target="_blank" '
+                        f'style="font-size:0.74rem;color:#3D5299;text-decoration:none;">'
+                        f'{img["author"]}</a>', unsafe_allow_html=True)
+            ca, cb = st.columns(2)
+            with ca:
+                if st.button("✓ Board" if on_board else "+ Board",
+                             key=f"{key_prefix}_b_{i}", use_container_width=True):
+                    if not on_board: st.session_state.selected_images.append(img)
+                    else: st.session_state.selected_images = [x for x in st.session_state.selected_images if x["thumb"] != img["thumb"]]
                     st.rerun()
-            with c2:
-                if st.button("✓ Cmp" if already_compare else "Compare",
-                             key=f"{key_prefix}_cmp_{i}", use_container_width=True):
-                    if already_compare:
-                        st.session_state.comparison_images = [
-                            x for x in st.session_state.comparison_images if x["thumb"] != img["thumb"]]
-                    elif len(st.session_state.comparison_images) < 2:
-                        st.session_state.comparison_images.append(img)
-                    else:
-                        st.session_state.comparison_images = [st.session_state.comparison_images[1], img]
+            with cb:
+                if st.button("✓ Cmp" if on_compare else "Compare",
+                             key=f"{key_prefix}_c_{i}", use_container_width=True):
+                    if on_compare: st.session_state.comparison_images = [x for x in st.session_state.comparison_images if x["thumb"] != img["thumb"]]
+                    elif len(st.session_state.comparison_images) < 2: st.session_state.comparison_images.append(img)
+                    else: st.session_state.comparison_images = [st.session_state.comparison_images[1], img]
                     st.rerun()
 
-# ── CSS — Zeronode-inspired ────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# CSS — exact Zeronode layout
+# ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300;1,400&display=swap');
 
+*, *::before, *::after { box-sizing: border-box; }
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
-/* Hide sidebar */
-[data-testid="stSidebar"],
-[data-testid="stSidebarNav"],
-[data-testid="collapsedControl"] { display: none !important; }
+/* ── Strip Streamlit chrome ── */
+header[data-testid="stHeader"]  { display: none !important; }
+[data-testid="stSidebar"]       { display: none !important; }
+[data-testid="collapsedControl"]{ display: none !important; }
+footer                          { display: none !important; }
+#MainMenu                       { display: none !important; }
 
-/* Background with blue gradient blob */
+/* ── App background ── */
 .stApp {
-    background-color: #EEF1FF;
-    background-image:
-        radial-gradient(ellipse at 88% 12%, rgba(22,53,204,0.70) 0%,
-                        rgba(22,53,204,0.35) 28%, rgba(22,53,204,0.08) 55%, transparent 70%);
-    background-attachment: fixed;
-    background-size: 100% 100%;
+    background-color: #F2F3F9;
+    min-height: 100vh;
 }
 
-/* Main container */
+/* ── Main content area ── */
 .main .block-container {
-    max-width: 1160px;
-    padding: 2.5rem 3rem 4rem !important;
-    position: relative; z-index: 1;
+    max-width: 100% !important;
+    padding-top: 80px !important;
+    padding-left: 4rem !important;
+    padding-right: 4rem !important;
+    padding-bottom: 4rem !important;
+    position: relative;
+    z-index: 10;
 }
 
-/* Typography */
-h1 { font-family: 'Inter', sans-serif !important; font-size: 2.8rem !important;
-     font-weight: 700 !important; color: #0B1D8A !important;
-     letter-spacing: -0.03em; line-height: 1.1 !important; }
-h2 { font-family: 'Inter', sans-serif !important; font-weight: 600 !important;
-     color: #0B1D8A !important; letter-spacing: -0.02em; }
-h3 { font-family: 'Inter', sans-serif !important; font-weight: 500 !important; color: #0B1D8A !important; }
-label, p, li { color: #2C3E7A; }
+/* ── Blue blob (fixed background) ── */
+.zn-blob {
+    position: fixed;
+    top: -8%;
+    right: -6%;
+    width: 62vw;
+    height: 115vh;
+    background: radial-gradient(
+        ellipse at 48% 42%,
+        #0A1FCC 0%,
+        #1330CC 12%,
+        #1A3AE0 24%,
+        rgba(22,53,220,0.72) 38%,
+        rgba(18,44,200,0.38) 55%,
+        rgba(15,35,170,0.12) 70%,
+        transparent 82%
+    );
+    border-radius: 58% 42% 52% 48% / 44% 56% 44% 56%;
+    pointer-events: none;
+    z-index: 1;
+}
+/* grain overlay */
+.zn-blob::after {
+    content: '';
+    position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 250px 250px;
+    opacity: 0.07;
+    mix-blend-mode: overlay;
+    border-radius: inherit;
+}
 
-/* Pills navigation */
-[data-testid="stPills"] { margin: 1.5rem 0 2rem 0; }
-[data-testid="stPillsButton"] {
-    background: rgba(255,255,255,0.75) !important;
-    border: 1.5px solid rgba(22,53,204,0.22) !important;
-    border-radius: 50px !important; color: #1635CC !important;
-    font-family: 'Inter', sans-serif !important; font-size: 0.82rem !important;
-    font-weight: 500 !important; letter-spacing: 0.03em !important;
-    padding: 0.45rem 1.4rem !important; transition: all 0.2s !important;
-    backdrop-filter: blur(8px) !important;
-}
-[data-testid="stPillsButton"][aria-selected="true"] {
-    background: #1635CC !important; color: #fff !important;
-    border-color: #1635CC !important;
-    box-shadow: 0 4px 18px rgba(22,53,204,0.38) !important;
-}
-[data-testid="stPillsButton"]:hover {
-    background: rgba(22,53,204,0.08) !important;
-    border-color: #1635CC !important;
+/* ── Bottom blue fade ── */
+.zn-bottom-fade {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 38vh;
+    background: linear-gradient(to top, rgba(14,30,160,0.42) 0%, transparent 100%);
+    pointer-events: none;
+    z-index: 1;
 }
 
-/* Buttons */
+/* ── Fixed top navigation bar ── */
+.zn-topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 62px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 3.5rem;
+    background: rgba(242,243,249,0.88);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-bottom: 1px solid rgba(22,53,204,0.07);
+    z-index: 500;
+}
+.zn-logo {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 0.82rem; font-weight: 700; letter-spacing: 0.1em;
+    color: #0D1F8A; text-decoration: none !important;
+    font-family: 'Inter', sans-serif;
+}
+.zn-logo svg { flex-shrink: 0; }
+.zn-nav {
+    display: flex; gap: 2.4rem;
+    position: absolute; left: 50%; transform: translateX(-50%);
+}
+.zn-navlink {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.76rem; font-weight: 500;
+    letter-spacing: 0.07em; color: #8892C0;
+    text-decoration: none !important;
+    transition: color 0.18s;
+    padding-bottom: 3px;
+    border-bottom: 2px solid transparent;
+}
+.zn-navlink:hover  { color: #0D1F8A; }
+.zn-navlink.active { color: #0D1F8A; border-bottom-color: #0D1F8A; }
+.zn-connect-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 0.42rem 1.25rem;
+    background: #0D1F8A; color: white !important;
+    border-radius: 50px; font-family: 'Inter', sans-serif;
+    font-size: 0.76rem; font-weight: 600; letter-spacing: 0.07em;
+    text-decoration: none !important; transition: background 0.18s;
+    white-space: nowrap;
+}
+.zn-connect-btn:hover { background: #1635CC; }
+
+/* ── Three floating right pills ── */
+.zn-float-pills {
+    position: fixed;
+    right: 4.5%;
+    top: 30%;
+    display: flex; flex-direction: column; gap: 13px;
+    z-index: 200;
+}
+.zn-fpill {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 12px 22px;
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.88);
+    border-radius: 50px;
+    color: #0D1F8A !important;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.86rem; font-weight: 500;
+    text-decoration: none !important;
+    min-width: 168px;
+    box-shadow: 0 4px 22px rgba(0,0,0,0.09);
+    transition: all 0.2s;
+    cursor: pointer;
+}
+.zn-fpill:nth-child(2) { margin-left: 18px; } /* stagger like Zeronode */
+.zn-fpill:hover {
+    background: rgba(255,255,255,0.92);
+    box-shadow: 0 6px 28px rgba(0,0,0,0.13);
+    transform: translateX(-3px);
+}
+.zn-fpill.active {
+    background: #0D1F8A;
+    color: white !important;
+    border-color: #0D1F8A;
+    box-shadow: 0 6px 28px rgba(13,31,138,0.42);
+}
+.zn-fpill-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+/* ── Hero section ── */
+.zn-hero { padding: 1.2rem 0 1.8rem; position: relative; z-index: 10; }
+.zn-badge-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 0.38rem 1.05rem;
+    background: rgba(255,255,255,0.75);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(22,53,204,0.14);
+    border-radius: 50px;
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.11em;
+    color: #0D1F8A; margin-bottom: 1.5rem; font-family: 'Inter', sans-serif;
+}
+.zn-headline {
+    font-size: 3.4rem !important; font-weight: 800 !important;
+    color: #0D1F8A !important; letter-spacing: -0.03em;
+    line-height: 1.07 !important; margin-bottom: 1.3rem !important;
+    font-family: 'Inter', sans-serif !important;
+}
+.zn-headline em { font-weight: 300 !important; font-style: italic; }
+.zn-hero-body {
+    font-size: 0.88rem; line-height: 1.72; color: #3D5299;
+    max-width: 310px; margin-bottom: 2rem;
+    font-family: 'Inter', sans-serif;
+}
+
+/* ── CTA buttons (override Streamlit) ── */
 .stButton > button[kind="primary"] {
-    background: #1635CC !important; color: #fff !important;
+    background: #0D1F8A !important; color: #fff !important;
     border: none !important; border-radius: 50px !important;
     font-family: 'Inter', sans-serif !important; font-weight: 600 !important;
-    letter-spacing: 0.03em !important; padding: 0.55rem 1.8rem !important;
-    box-shadow: 0 4px 18px rgba(22,53,204,0.32) !important; transition: all 0.18s !important;
+    font-size: 0.78rem !important; letter-spacing: 0.07em !important;
+    padding: 0.58rem 1.7rem !important;
+    box-shadow: 0 4px 20px rgba(13,31,138,0.3) !important;
+    transition: all 0.18s !important; text-transform: uppercase;
 }
 .stButton > button[kind="primary"]:hover {
-    background: #0D25B3 !important;
-    box-shadow: 0 6px 22px rgba(22,53,204,0.45) !important;
+    background: #1635CC !important;
+    box-shadow: 0 6px 24px rgba(13,31,138,0.42) !important;
     transform: translateY(-1px) !important;
 }
 .stButton > button[kind="secondary"] {
-    background: rgba(255,255,255,0.78) !important; color: #1635CC !important;
-    border: 1.5px solid rgba(22,53,204,0.28) !important; border-radius: 50px !important;
+    background: rgba(255,255,255,0.78) !important;
+    color: #0D1F8A !important;
+    border: 1.5px solid rgba(13,31,138,0.28) !important;
+    border-radius: 50px !important;
     font-family: 'Inter', sans-serif !important; font-weight: 500 !important;
+    font-size: 0.78rem !important; letter-spacing: 0.07em !important;
+    text-transform: uppercase;
     backdrop-filter: blur(8px) !important;
 }
-.stButton > button[kind="secondary"]:hover { background: rgba(22,53,204,0.07) !important; }
+.stButton > button[kind="secondary"]:hover {
+    background: rgba(13,31,138,0.06) !important;
+    border-color: #0D1F8A !important;
+}
 .stDownloadButton > button {
-    background: rgba(255,255,255,0.8) !important; color: #1635CC !important;
-    border: 1.5px solid rgba(22,53,204,0.28) !important; border-radius: 50px !important;
+    background: rgba(255,255,255,0.82) !important;
+    color: #0D1F8A !important;
+    border: 1.5px solid rgba(13,31,138,0.25) !important;
+    border-radius: 50px !important;
     font-family: 'Inter', sans-serif !important;
+    font-size: 0.78rem !important; font-weight: 500 !important;
 }
 
-/* Inputs */
-input, textarea,
-[data-testid="stTextInput"] input {
+/* ── Glass cards ── */
+.zn-card {
+    background: rgba(255,255,255,0.48);
+    backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+    border: 1px solid rgba(255,255,255,0.82);
+    border-radius: 24px; padding: 1.7rem 2rem;
+    box-shadow: 0 4px 32px rgba(13,31,138,0.07);
+    position: relative; z-index: 10;
+}
+.zn-card-label {
+    font-size: 0.67rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #1635CC; font-weight: 700; margin-bottom: 1.1rem;
+    font-family: 'Inter', sans-serif;
+}
+
+/* ── Stats grid (bottom right card) ── */
+.zn-stats-grid {
+    display: flex; gap: 1.5rem; margin-bottom: 1rem;
+}
+.zn-stat { text-align: center; flex: 1; }
+.zn-stat-val {
+    font-size: 1.9rem; font-weight: 700; color: #0D1F8A;
+    font-family: 'Inter', sans-serif; line-height: 1;
+}
+.zn-stat-lbl {
+    font-size: 0.7rem; color: #8892C0; margin-top: 0.3rem;
+    font-family: 'Inter', sans-serif; letter-spacing: 0.03em;
+}
+
+/* ── Inputs ── */
+input, textarea, [data-testid="stTextInput"] input {
     background: rgba(255,255,255,0.88) !important;
-    border: 1.5px solid rgba(22,53,204,0.18) !important;
-    border-radius: 12px !important; color: #0B1D8A !important;
-    font-family: 'Inter', sans-serif !important;
+    border: 1.5px solid rgba(13,31,138,0.16) !important;
+    border-radius: 12px !important;
+    color: #0D1F8A !important; font-family: 'Inter', sans-serif !important;
 }
 input:focus, textarea:focus {
-    border-color: #1635CC !important;
-    box-shadow: 0 0 0 3px rgba(22,53,204,0.12) !important;
+    border-color: #0D1F8A !important;
+    box-shadow: 0 0 0 3px rgba(13,31,138,0.1) !important;
 }
 [data-testid="stSelectbox"] > div > div {
     background: rgba(255,255,255,0.88) !important;
-    border: 1.5px solid rgba(22,53,204,0.18) !important;
-    border-radius: 12px !important; color: #0B1D8A !important;
+    border: 1.5px solid rgba(13,31,138,0.16) !important;
+    border-radius: 12px !important; color: #0D1F8A !important;
+}
+label { color: #3D5299 !important; font-size: 0.8rem !important; }
+
+/* ── Alerts ── */
+.stSuccess { background: rgba(13,31,138,0.06) !important; color: #0D1F8A !important;
+             border-left: 4px solid #1635CC !important; border-radius: 12px !important; }
+.stInfo    { background: rgba(255,255,255,0.6) !important; color: #3D5299 !important;
+             border-left: 4px solid rgba(13,31,138,0.3) !important; border-radius: 12px !important; }
+.stWarning { background: rgba(255,195,0,0.1) !important; border-radius: 12px !important; }
+
+/* ── Page header for sub-pages ── */
+.zn-page-header { margin-bottom: 2rem; position: relative; z-index: 10; }
+.zn-page-title  {
+    font-size: 2.2rem !important; font-weight: 700 !important;
+    color: #0D1F8A !important; letter-spacing: -0.02em; margin: 0.4rem 0 0.2rem !important;
+    font-family: 'Inter', sans-serif !important;
+}
+.zn-badge-small {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 0.28rem 0.85rem;
+    background: rgba(255,255,255,0.7); border: 1px solid rgba(13,31,138,0.14);
+    border-radius: 50px; font-size: 0.67rem; font-weight: 600;
+    letter-spacing: 0.12em; color: #1635CC; font-family: 'Inter', sans-serif;
+    margin-bottom: 0.6rem;
 }
 
-/* Alerts */
-.stSuccess { background: rgba(22,53,204,0.07) !important; color: #0B1D8A !important;
-             border: 1px solid rgba(22,53,204,0.18) !important; border-radius: 12px !important;
-             border-left: 4px solid #1635CC !important; }
-.stInfo    { background: rgba(255,255,255,0.68) !important; color: #2C3E7A !important;
-             border: 1px solid rgba(22,53,204,0.14) !important; border-radius: 12px !important;
-             border-left: 4px solid rgba(22,53,204,0.35) !important; }
-.stWarning { background: rgba(255,200,50,0.1) !important; border-radius: 12px !important; }
-
-hr { border-color: rgba(22,53,204,0.1) !important; }
-
-/* Glass card (via wrapping div) */
-.glass {
-    background: rgba(255,255,255,0.72);
-    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-    border: 1px solid rgba(255,255,255,0.9);
-    border-radius: 22px; padding: 1.6rem 1.8rem;
-    box-shadow: 0 4px 28px rgba(22,53,204,0.07);
-    margin-bottom: 1rem;
+/* ── Query cards ── */
+.qcard {
+    background: rgba(255,255,255,0.62);
+    backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.85);
+    border-radius: 20px; padding: 1.2rem 1.4rem 1rem; margin-bottom: 0.9rem;
+    box-shadow: 0 2px 16px rgba(13,31,138,0.06);
 }
-
-/* Brief context bar */
-.brief-bar {
-    display: inline-flex; align-items: center; gap: 0.55rem;
-    background: rgba(255,255,255,0.72); backdrop-filter: blur(12px);
-    border: 1px solid rgba(22,53,204,0.16); border-radius: 50px;
-    padding: 0.45rem 1.4rem; font-size: 0.82rem; color: #2C3E7A;
-    margin-bottom: 1.8rem;
-}
-.brief-dot { width:7px; height:7px; background:#1635CC; border-radius:50%; display:inline-block; }
-
-/* Section label */
-.section-tag {
-    display: inline-flex; align-items: center; gap: 0.4rem;
-    font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase;
-    color: #1635CC; font-weight: 600; margin-bottom: 0.25rem;
-}
-.section-tag::before { content: '•'; font-size: 1.1rem; color: #1635CC; }
-
-/* Subtitle */
-.subtitle { font-size: 1rem; color: #3D5299; margin-top: -0.5rem;
-            margin-bottom: 2rem; font-weight: 400; line-height: 1.55; }
-
-/* Query cards */
-.query-card {
-    background: rgba(255,255,255,0.72); backdrop-filter: blur(16px);
-    border: 1px solid rgba(255,255,255,0.88); border-radius: 20px;
-    padding: 1.2rem 1.4rem 1rem; margin-bottom: 1rem;
-    box-shadow: 0 2px 18px rgba(22,53,204,0.06);
-}
-.query-header { display:flex; align-items:baseline; gap:0.6rem; margin-bottom:0.75rem; }
-.query-num  { font-size:0.68rem; color:#1635CC; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; }
-.query-text { font-size:0.95rem; color:#0B1D8A; font-style:italic; }
-
-/* Preview strip */
-.preview-strip { display:flex; gap:0.5rem; margin-bottom:0.8rem; }
-.preview-strip a { width:calc(33.33% - 0.34rem); display:block; }
-.preview-strip img { width:100%; height:92px; object-fit:cover; border-radius:10px;
-                     border:1px solid rgba(22,53,204,0.1); display:block; }
-.preview-placeholder { width:calc(33.33% - 0.34rem); height:92px;
-                        background:rgba(22,53,204,0.05); border-radius:10px;
-                        border:1px solid rgba(22,53,204,0.1); }
-
-/* Platform buttons */
+.qcard-num  { font-size: 0.67rem; color: #1635CC; font-weight: 700;
+              letter-spacing: 0.1em; text-transform: uppercase; }
+.qcard-text { font-size: 0.94rem; color: #0D1F8A; font-style: italic; margin: 0.3rem 0 0.8rem; }
+.preview-strip { display:flex; gap:0.45rem; margin-bottom:0.8rem; }
+.preview-strip a  { flex:1; display:block; }
+.preview-strip img{ width:100%; height:90px; object-fit:cover; border-radius:10px;
+                    border:1px solid rgba(13,31,138,0.1); display:block; }
+.preview-ph { flex:1; height:90px; background:rgba(13,31,138,0.04);
+              border-radius:10px; border:1px solid rgba(13,31,138,0.08); }
 .btn-row { display:flex; flex-wrap:wrap; gap:0.3rem; }
-.ref-btn { display:inline-flex; align-items:center; padding:0.32rem 0.85rem;
+.ref-btn { display:inline-flex; align-items:center; padding:0.3rem 0.82rem;
            border-radius:50px; text-decoration:none !important;
-           font-size:0.76rem; font-weight:500; font-family:'Inter',sans-serif;
+           font-size:0.75rem; font-weight:500; font-family:'Inter',sans-serif;
            transition:all 0.18s; border:1px solid transparent; }
 .ref-btn:hover { opacity:0.82; transform:translateY(-1px); }
-.btn-pinterest { background:rgba(230,0,35,0.09); color:#cc0020 !important; border-color:rgba(230,0,35,0.2); }
-.btn-behance   { background:rgba(23,105,255,0.09); color:#1769FF !important; border-color:rgba(23,105,255,0.2); }
-.btn-google    { background:rgba(255,255,255,0.8); color:#0B1D8A !important; border-color:rgba(22,53,204,0.18); }
-.btn-archinect { background:rgba(11,29,138,0.07); color:#0B1D8A !important; border-color:rgba(11,29,138,0.18); }
-.btn-arena     { background:rgba(22,53,204,0.09); color:#1635CC !important; border-color:rgba(22,53,204,0.2); }
+.btn-p  { background:rgba(230,0,35,0.09);  color:#cc0020 !important; border-color:rgba(230,0,35,0.2); }
+.btn-b  { background:rgba(23,105,255,0.09); color:#1769FF !important; border-color:rgba(23,105,255,0.2); }
+.btn-g  { background:rgba(255,255,255,0.8); color:#0D1F8A !important; border-color:rgba(13,31,138,0.18); }
+.btn-a  { background:rgba(13,31,138,0.07); color:#0D1F8A !important; border-color:rgba(13,31,138,0.18); }
+.btn-r  { background:rgba(22,53,204,0.09); color:#1635CC !important; border-color:rgba(22,53,204,0.2); }
 
-/* Keyword tags */
-.kw-tag { display:inline-block; padding:0.2rem 0.78rem; margin:0.15rem;
-          background:rgba(22,53,204,0.07); border:1px solid rgba(22,53,204,0.18);
-          border-radius:50px; font-size:0.78rem; color:#1635CC;
+/* ── Tags / badges ── */
+.kw-tag { display:inline-block; padding:0.2rem 0.76rem; margin:0.14rem;
+          background:rgba(13,31,138,0.07); border:1px solid rgba(13,31,138,0.16);
+          border-radius:50px; font-size:0.77rem; color:#1635CC;
           font-family:'Inter',sans-serif; font-weight:500; }
-
-/* Image badges */
-.badge { display:inline-block; padding:0.1rem 0.48rem; border-radius:20px;
-         font-size:0.64rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; }
-.badge-unsplash { background:rgba(11,29,138,0.09); color:#0B1D8A; }
+.badge  { display:inline-block; padding:0.1rem 0.46rem; border-radius:20px;
+          font-size:0.64rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; }
+.badge-unsplash { background:rgba(13,31,138,0.09); color:#0D1F8A; }
 .badge-pexels   { background:rgba(22,53,204,0.12); color:#1635CC; }
 
-/* Color swatches */
-.swatch-row { display:flex; gap:0.9rem; flex-wrap:wrap; margin:1rem 0; }
-.swatch { width:72px; text-align:center; }
-.swatch-block { width:72px; height:64px; border-radius:14px;
-                border:1px solid rgba(0,0,0,0.06); margin-bottom:0.35rem;
+/* ── Filter chip labels ── */
+.filter-lbl { font-size:0.68rem; letter-spacing:0.12em; text-transform:uppercase;
+              color:#3D5299; font-weight:600; margin:0.9rem 0 0.3rem;
+              font-family:'Inter',sans-serif; }
+
+/* ── Palette swatches ── */
+.swatch-row { display:flex; gap:0.85rem; flex-wrap:wrap; margin:1rem 0; }
+.swatch { width:68px; text-align:center; }
+.swatch-block { width:68px; height:60px; border-radius:14px;
+                border:1px solid rgba(0,0,0,0.06); margin-bottom:0.32rem;
                 box-shadow:0 2px 10px rgba(0,0,0,0.1); }
-.swatch-hex { font-size:0.68rem; color:#3D5299; font-family:monospace; }
+.swatch-hex { font-size:0.66rem; color:#3D5299; font-family:monospace; }
 
-/* Prompt box */
-.prompt-box { background:rgba(255,255,255,0.85); backdrop-filter:blur(12px);
-              border:1.5px solid rgba(22,53,204,0.16); border-radius:16px;
-              padding:1.4rem 1.6rem; font-size:0.87rem; color:#0B1D8A;
-              font-family:monospace; line-height:1.7; white-space:pre-wrap; }
+/* ── Prompt box ── */
+.prompt-box { background:rgba(255,255,255,0.82); border:1.5px solid rgba(13,31,138,0.15);
+              border-radius:16px; padding:1.3rem 1.5rem; font-size:0.86rem; color:#0D1F8A;
+              font-family:monospace; line-height:1.72; white-space:pre-wrap; }
 
-/* Compare */
-.compare-label { font-size:0.68rem; letter-spacing:0.1em; text-transform:uppercase;
-                 color:#3D5299; margin-bottom:0.3rem; }
-
-/* Filter heading */
-.filter-heading { font-size:0.7rem; letter-spacing:0.11em; text-transform:uppercase;
-                  color:#3D5299; font-weight:600; margin:1.1rem 0 0.35rem 0; }
-
-/* History item */
-.hist-item { font-size:0.78rem; color:#3D5299; padding:0.2rem 0; }
+hr { border-color:rgba(13,31,138,0.09) !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Global header ──────────────────────────────────────────────────────────────
-st.markdown("<div class='section-tag'>AI TOOL</div>", unsafe_allow_html=True)
-st.title("Render Finder")
-st.markdown(
-    "<div class='subtitle'>AI-powered image curation for Photoshop renders</div>",
-    unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# Background + fixed chrome
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown('<div class="zn-blob" aria-hidden="true"></div>'
+            '<div class="zn-bottom-fade" aria-hidden="true"></div>',
+            unsafe_allow_html=True)
 
-# ── Bubble navigation ──────────────────────────────────────────────────────────
-page = st.pills(
-    "nav", ["Brief", "Search", "Browse", "Palette", "Board", "Prompt"],
-    key="nav_pills", label_visibility="collapsed")
-if page is None:
-    page = "Brief"
+# Top navigation bar
+def _nc(p): return "zn-navlink active" if p == page else "zn-navlink"
+nav_map = [("HOME","Brief"),("SEARCH","Search"),("BROWSE","Browse"),
+           ("PALETTE","Palette"),("BOARD","Board"),("PROMPT","Prompt")]
+nav_links = "".join(f'<a href="?page={pv}" class="{_nc(pv)}">{pl}</a>' for pl, pv in nav_map)
+brief_lbl = (st.session_state.brief_space[:11]+"…" if len(st.session_state.brief_space)>11
+             else st.session_state.brief_space) if st.session_state.brief_space else "BRIEF"
 
-# Convenience aliases (always fresh from session state)
-space      = st.session_state.brief_space
-style      = st.session_state.brief_style
-mood       = st.session_state.brief_mood
-background = st.session_state.brief_background
+st.markdown(f"""
+<div class="zn-topbar">
+  <a href="?page=Brief" class="zn-logo">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="9" cy="9" r="2" fill="#0D1F8A"/>
+      <line x1="9" y1="1" x2="9" y2="4.5" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="9" y1="13.5" x2="9" y2="17" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="1" y1="9" x2="4.5" y2="9" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="13.5" y1="9" x2="17" y2="9" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="3.22" y1="3.22" x2="5.64" y2="5.64" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="12.36" y1="12.36" x2="14.78" y2="14.78" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="14.78" y1="3.22" x2="12.36" y2="5.64" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="5.64" y1="12.36" x2="3.22" y2="14.78" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    RENDER FINDER
+  </a>
+  <nav class="zn-nav">{nav_links}</nav>
+  <a href="?page=Brief" class="zn-connect-btn">{brief_lbl} ●</a>
+</div>
+""", unsafe_allow_html=True)
 
-# Brief context bar on non-Brief pages
-if page != "Brief" and space and mood:
-    st.markdown(
-        f"<div class='brief-bar'><span class='brief-dot'></span>"
-        f"<strong>{space}</strong> · {style} · {mood}</div>",
-        unsafe_allow_html=True)
+# Three floating right pills (always visible — like Zeronode's Transparency/Regeneration/Intelligence)
+fp_items = [
+    ("⊕", "Search Refs",   "Search"),
+    ("⊟", "Browse Images", "Browse"),
+    ("✦", "AI Prompt",     "Prompt"),
+]
+fp_html = "".join(
+    f'<a href="?page={fp_p}" class="zn-fpill{"  active" if page == fp_p else ""}">'
+    f'<span class="zn-fpill-icon">{fp_ic}</span>{fp_lb}</a>'
+    for fp_ic, fp_lb, fp_p in fp_items
+)
+st.markdown(f'<div class="zn-float-pills">{fp_html}</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE: Brief
+# BRIEF  (home page — exact Zeronode hero layout)
 # ══════════════════════════════════════════════════════════════════════════════
 if page == "Brief":
-    st.markdown("<div class='section-tag'>Start here</div>", unsafe_allow_html=True)
-    st.header("Define Your Brief")
-    st.markdown(
-        "<p style='color:#3D5299;margin-top:-0.4rem;margin-bottom:1.8rem;'>"
-        "Describe the space, style, and mood you're rendering. "
-        "Use a template to get started instantly.</p>", unsafe_allow_html=True)
+    hero_col, _ = st.columns([5, 5])
+    with hero_col:
+        st.markdown("""
+        <div class="zn-hero">
+          <div class="zn-badge-pill">● WHERE RENDERS BEGIN</div>
+          <h1 class="zn-headline">Where every reference<br>finds its <em>render.</em></h1>
+          <p class="zn-hero-body">
+            Render Finder curates architectural and interior references from
+            Pinterest, Behance, Unsplash, Pexels, and more — powered by Claude
+            AI to match your exact brief.
+          </p>
+        </div>
+        """, unsafe_allow_html=True)
 
-    col_form, col_hist = st.columns([3, 1])
+        b1, b2, _ = st.columns([2.4, 2.1, 2])
+        with b1:
+            if st.button("FIND REFERENCES →", type="primary", key="cta_find", use_container_width=True):
+                if not st.session_state.brief_space or not st.session_state.brief_mood:
+                    st.warning("Fill in Space and Mood in the brief below first.")
+                else:
+                    brief = {k: st.session_state[f"brief_{k}"] for k in ["space","style","mood","background"]}
+                    if not st.session_state.history or st.session_state.history[0] != brief:
+                        st.session_state.history.insert(0, brief); st.session_state.history = st.session_state.history[:5]
+                    go_to("Search")
+        with b2:
+            if st.button("BROWSE IMAGES", key="cta_browse", use_container_width=True):
+                go_to("Browse")
 
-    with col_form:
-        st.markdown("<div class='glass'>", unsafe_allow_html=True)
+    # ── Bottom cards (like "BUILDING THE FOUNDATION" + "STAY CONNECTED") ──────
+    st.markdown("<div style='height:3.5rem'></div>", unsafe_allow_html=True)
+    card_left, _, card_right = st.columns([4.5, 0.4, 2.6])
 
-        st.markdown("<div class='filter-heading'>Load a template</div>", unsafe_allow_html=True)
-        st.selectbox("template", list(TEMPLATES.keys()), key="template_selector",
+    with card_left:
+        st.markdown('<div class="zn-card">', unsafe_allow_html=True)
+        st.markdown('<div class="zn-card-label">YOUR BRIEF</div>', unsafe_allow_html=True)
+
+        st.selectbox("tmpl", list(TEMPLATES.keys()), key="template_selector",
                      on_change=on_template_change, label_visibility="collapsed")
 
-        st.markdown("<div class='filter-heading' style='margin-top:1.2rem'>Space</div>",
-                    unsafe_allow_html=True)
-        st.text_input("space_input", placeholder="e.g. living room, outdoor courtyard",
-                      key="brief_space", label_visibility="collapsed")
-
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("<div class='filter-heading'>Style</div>", unsafe_allow_html=True)
-            st.selectbox("style_sel", STYLE_OPTIONS, key="brief_style", label_visibility="collapsed")
-        with c2:
-            st.markdown("<div class='filter-heading'>Background</div>", unsafe_allow_html=True)
-            st.selectbox("bg_sel", BG_OPTIONS, key="brief_background", label_visibility="collapsed")
-
-        st.markdown("<div class='filter-heading'>Mood</div>", unsafe_allow_html=True)
-        st.text_input("mood_input", placeholder="e.g. warm and earthy, editorial, hazy",
-                      key="brief_mood", label_visibility="collapsed")
+        ci1, ci2 = st.columns(2)
+        with ci1:
+            st.text_input("Space", placeholder="e.g. living room",
+                          key="brief_space", label_visibility="visible")
+        with ci2:
+            st.selectbox("Style", STYLE_OPTIONS, key="brief_style",
+                         label_visibility="visible")
+        st.text_input("Mood", placeholder="e.g. warm, earthy, editorial",
+                      key="brief_mood", label_visibility="visible")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-        bc1, bc2, bc3 = st.columns([2, 2, 1])
-        with bc1:
-            if st.button("Find References →", type="primary", use_container_width=True):
-                if not space or not mood:
-                    st.warning("Fill in Space and Mood first.")
-                else:
-                    brief = {"space": space, "style": style, "mood": mood, "background": background}
-                    if not st.session_state.history or st.session_state.history[0] != brief:
-                        st.session_state.history.insert(0, brief)
-                        st.session_state.history = st.session_state.history[:5]
-                    go_to("Search")
-        with bc2:
-            if st.button("Browse Images →", use_container_width=True):
-                go_to("Browse")
+    with card_right:
+        st.markdown('<div class="zn-card">', unsafe_allow_html=True)
+        st.markdown('<div class="zn-card-label">SESSION</div>', unsafe_allow_html=True)
+        n_b = len(st.session_state.selected_images)
+        n_h = len(st.session_state.history)
+        n_q = len(st.session_state.generated_queries)
+        st.markdown(f"""
+        <div class="zn-stats-grid">
+          <div class="zn-stat">
+            <div class="zn-stat-val">{n_b}</div>
+            <div class="zn-stat-lbl">Board</div>
+          </div>
+          <div class="zn-stat">
+            <div class="zn-stat-val">{n_h}</div>
+            <div class="zn-stat-lbl">Briefs</div>
+          </div>
+          <div class="zn-stat">
+            <div class="zn-stat-val">{n_q}</div>
+            <div class="zn-stat-lbl">Queries</div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    with col_hist:
         if st.session_state.history:
-            st.markdown("<div class='filter-heading'>Recent briefs</div>", unsafe_allow_html=True)
-            for j, h in enumerate(st.session_state.history):
-                st.markdown(f"<div class='hist-item'>{h['space']} · {h['style']}</div>",
-                            unsafe_allow_html=True)
-                if st.button("↩ Load", key=f"hist_{j}", use_container_width=True):
-                    for fk in ["space","style","mood","background"]:
-                        st.session_state[f"brief_{fk}"] = h[fk]
-                    st.rerun()
-        if st.session_state.selected_images:
-            n_b = len(st.session_state.selected_images)
-            st.markdown("<div class='filter-heading' style='margin-top:1.5rem'>Mood Board</div>",
-                        unsafe_allow_html=True)
-            st.markdown(f"<div class='hist-item'>{n_b} image{'s' if n_b!=1 else ''} selected</div>",
-                        unsafe_allow_html=True)
-            if st.button("Open Board →", use_container_width=True):
+            last = st.session_state.history[0]
+            st.markdown(f"<div style='font-size:0.77rem;color:#3D5299;margin-top:0.5rem'>"
+                        f"Last: {last['space']} · {last['style']}</div>", unsafe_allow_html=True)
+        if n_b:
+            if st.button("Open Mood Board →", use_container_width=True):
                 go_to("Board")
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE: Search
+# SEARCH
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Search":
-    st.markdown("<div class='section-tag'>AI-generated</div>", unsafe_allow_html=True)
-    st.header("Reference Queries")
+    st.markdown('<div class="zn-page-header">'
+                '<div class="zn-badge-small">● AI-GENERATED</div>'
+                '<h2 class="zn-page-title">Reference Queries</h2></div>',
+                unsafe_allow_html=True)
 
-    find_btn = st.button("Generate Queries", type="primary")
-
-    if find_btn:
-        if not space or not mood:
-            st.warning("Go to **Brief** and fill in Space and Mood first.")
+    if st.button("Generate Queries", type="primary"):
+        sp = st.session_state.brief_space; mo = st.session_state.brief_mood
+        if not sp or not mo:
+            st.warning("Go to **Home** and fill in Space and Mood first.")
         else:
-            brief = {"space": space, "style": style, "mood": mood, "background": background}
+            sty = st.session_state.brief_style; bg = st.session_state.brief_background
+            brief = {"space":sp,"style":sty,"mood":mo,"background":bg}
             if not st.session_state.history or st.session_state.history[0] != brief:
-                st.session_state.history.insert(0, brief)
-                st.session_state.history = st.session_state.history[:5]
-            prompt = (
-                f"Generate 5 targeted search queries for a designer finding Photoshop render references. "
-                f"Brief — Space: {space}, Style: {style}, Mood: {mood}, Background: {background}. "
-                f"Use designer vocabulary. Return numbered list only, no extra text.")
+                st.session_state.history.insert(0,brief); st.session_state.history = st.session_state.history[:5]
+            prompt = (f"Generate 5 targeted search queries for a designer finding Photoshop render references. "
+                      f"Brief — Space: {sp}, Style: {sty}, Mood: {mo}, Background: {bg}. "
+                      f"Use designer vocabulary. Return numbered list only, no extra text.")
             with st.spinner("Generating queries..."):
-                response = client.messages.create(
-                    model="claude-haiku-4-5-20251001", max_tokens=512,
-                    messages=[{"role": "user", "content": prompt}])
-            raw = response.content[0].text.strip()
-            st.session_state.generated_queries = [l.strip() for l in raw.splitlines() if l.strip()]
+                resp = client.messages.create(model="claude-haiku-4-5-20251001", max_tokens=512,
+                    messages=[{"role":"user","content":prompt}])
+            st.session_state.generated_queries = [l.strip() for l in resp.content[0].text.strip().splitlines() if l.strip()]
 
     if st.session_state.generated_queries:
-        lines    = st.session_state.generated_queries
+        lines = st.session_state.generated_queries
         has_keys = bool(get_secret("UNSPLASH_ACCESS_KEY") or get_secret("PEXELS_API_KEY"))
-
-        keywords = extract_keywords([l.lstrip("0123456789. ").strip('"') for l in lines])
-        if keywords:
-            st.markdown(
-                "<div style='margin-bottom:1.4rem'>" +
-                "".join(f"<span class='kw-tag'>{w}</span>" for w in keywords) +
-                "</div>", unsafe_allow_html=True)
-
+        kws = extract_keywords([l.lstrip("0123456789. ").strip('"') for l in lines])
+        if kws:
+            st.markdown("<div style='margin-bottom:1.4rem'>" +
+                        "".join(f"<span class='kw-tag'>{w}</span>" for w in kws) +
+                        "</div>", unsafe_allow_html=True)
         for i, line in enumerate(lines, 1):
             qt  = line.lstrip("0123456789. ").strip('"')
             enc = urllib.parse.quote_plus(qt)
             previews = []
             if has_keys:
                 previews = search_unsplash(qt, n=3)
-                if len(previews) < 3:
-                    previews += search_pexels(qt, n=3 - len(previews))
-
+                if len(previews) < 3: previews += search_pexels(qt, n=3-len(previews))
             strip = ""
             if previews:
                 strip = '<div class="preview-strip">' + "".join(
-                    f'<a href="{p["link"]}" target="_blank" rel="noopener">'
-                    f'<img src="{p["thumb"]}" alt="{p["author"]}"></a>'
+                    f'<a href="{p["link"]}" target="_blank"><img src="{p["thumb"]}" alt="{p["author"]}"></a>'
                     for p in previews[:3]) + "</div>"
             elif has_keys:
-                strip = '<div class="preview-strip">' + \
-                        '<div class="preview-placeholder"></div>' * 3 + "</div>"
-
+                strip = '<div class="preview-strip">' + '<div class="preview-ph"></div>'*3 + "</div>"
             st.markdown(f"""
-            <div class="query-card">
-                <div class="query-header">
-                    <span class="query-num">Query {i}</span>
-                    <span class="query-text">{qt}</span>
-                </div>
-                {strip}
-                <div class="btn-row">
-                    <a class="ref-btn btn-pinterest" href="https://www.pinterest.com/search/pins/?q={enc}"       target="_blank">Pinterest</a>
-                    <a class="ref-btn btn-behance"   href="https://www.behance.net/search/projects?search={enc}" target="_blank">Behance</a>
-                    <a class="ref-btn btn-google"    href="https://www.google.com/search?tbm=isch&q={enc}"       target="_blank">Google Images</a>
-                    <a class="ref-btn btn-archinect" href="https://archinect.com/search#/?q={enc}&type=photos"   target="_blank">Archinect</a>
-                    <a class="ref-btn btn-arena"     href="https://www.are.na/search/{enc}"                      target="_blank">Are.na</a>
-                </div>
+            <div class="qcard">
+              <div class="qcard-num">Query {i}</div>
+              <div class="qcard-text">{qt}</div>
+              {strip}
+              <div class="btn-row">
+                <a class="ref-btn btn-p" href="https://www.pinterest.com/search/pins/?q={enc}" target="_blank">Pinterest</a>
+                <a class="ref-btn btn-b" href="https://www.behance.net/search/projects?search={enc}" target="_blank">Behance</a>
+                <a class="ref-btn btn-g" href="https://www.google.com/search?tbm=isch&q={enc}" target="_blank">Google Images</a>
+                <a class="ref-btn btn-a" href="https://archinect.com/search#/?q={enc}&type=photos" target="_blank">Archinect</a>
+                <a class="ref-btn btn-r" href="https://www.are.na/search/{enc}" target="_blank">Are.na</a>
+              </div>
             </div>""", unsafe_allow_html=True)
-
         if not has_keys:
             st.info("Add **UNSPLASH_ACCESS_KEY** or **PEXELS_API_KEY** to secrets to see image previews.")
-        st.success(f"{len(lines)} queries generated. Click any image or platform button to explore.")
+        st.success(f"{len(lines)} queries generated.")
     else:
         st.info("Click **Generate Queries** to create AI-powered search queries from your brief.")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE: Browse  (filter chips — no AI needed)
+# BROWSE
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Browse":
-    st.markdown("<div class='section-tag'>No AI needed</div>", unsafe_allow_html=True)
-    st.header("Browse & Filter")
-    st.markdown(
-        "<p style='color:#3D5299;margin-top:-0.4rem;margin-bottom:1.4rem;'>"
-        "Select filters to browse images directly — no prompts required.</p>",
-        unsafe_allow_html=True)
+    st.markdown('<div class="zn-page-header">'
+                '<div class="zn-badge-small">● NO AI NEEDED</div>'
+                '<h2 class="zn-page-title">Browse & Filter</h2></div>',
+                unsafe_allow_html=True)
 
-    st.markdown("<div class='filter-heading'>Space</div>", unsafe_allow_html=True)
-    sel_spaces = st.pills("spaces", FILTER_SPACES, selection_mode="multi",
-                          label_visibility="collapsed")
-
-    st.markdown("<div class='filter-heading'>Style</div>", unsafe_allow_html=True)
-    sel_styles = st.pills("styles", FILTER_STYLES, selection_mode="multi",
-                          label_visibility="collapsed")
-
-    st.markdown("<div class='filter-heading'>Mood</div>", unsafe_allow_html=True)
-    sel_moods = st.pills("moods", FILTER_MOODS, selection_mode="multi",
-                         label_visibility="collapsed")
-
-    st.markdown("<div class='filter-heading'>Lighting</div>", unsafe_allow_html=True)
-    sel_lights = st.pills("lights", FILTER_LIGHTS, selection_mode="multi",
-                          label_visibility="collapsed")
+    st.markdown("<div class='filter-lbl'>Space</div>", unsafe_allow_html=True)
+    sel_spaces = st.pills("spaces", FILTER_SPACES, selection_mode="multi", label_visibility="collapsed")
+    st.markdown("<div class='filter-lbl'>Style</div>", unsafe_allow_html=True)
+    sel_styles = st.pills("styles", FILTER_STYLES, selection_mode="multi", label_visibility="collapsed")
+    st.markdown("<div class='filter-lbl'>Mood</div>", unsafe_allow_html=True)
+    sel_moods  = st.pills("moods",  FILTER_MOODS,  selection_mode="multi", label_visibility="collapsed")
+    st.markdown("<div class='filter-lbl'>Lighting</div>", unsafe_allow_html=True)
+    sel_lights = st.pills("lights", FILTER_LIGHTS, selection_mode="multi", label_visibility="collapsed")
 
     st.markdown("<br>", unsafe_allow_html=True)
-    fa, fb = st.columns([2, 4])
+    fa, fb = st.columns([2, 5])
     with fa:
         filter_btn = st.button("Browse Images", type="primary", use_container_width=True)
     with fb:
-        all_tags = list(sel_spaces or []) + list(sel_styles or []) + \
-                   list(sel_moods or []) + list(sel_lights or [])
-        if all_tags:
-            st.markdown(
-                f"<div style='padding-top:0.55rem;color:#1635CC;font-size:0.82rem;'>"
-                f"Query: <em>{', '.join(all_tags)}</em></div>",
-                unsafe_allow_html=True)
+        tags = list(sel_spaces or []) + list(sel_styles or []) + list(sel_moods or []) + list(sel_lights or [])
+        if tags:
+            st.markdown(f"<div style='padding-top:0.55rem;color:#1635CC;font-size:0.82rem;'>"
+                        f"Query: <em>{', '.join(tags)}</em></div>", unsafe_allow_html=True)
 
     if filter_btn:
-        all_tags = list(sel_spaces or []) + list(sel_styles or []) + \
-                   list(sel_moods or []) + list(sel_lights or [])
-        if not all_tags:
-            st.warning("Select at least one filter to browse.")
-        elif not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
-            st.warning("Add **UNSPLASH_ACCESS_KEY** or **PEXELS_API_KEY** to Streamlit secrets.")
-        else:
-            q = " ".join(all_tags) + " interior architecture"
-            with st.spinner("Fetching images..."):
-                st.session_state.filter_results = \
-                    search_unsplash(q, n=9) + search_pexels(q, n=9)
-
-    # Also allow browsing from brief
-    st.divider()
-    browse_brief_btn = st.button("Browse from Brief", use_container_width=False)
-    if browse_brief_btn:
-        if not space or not mood:
-            st.warning("Set a brief first.")
+        tags = list(sel_spaces or []) + list(sel_styles or []) + list(sel_moods or []) + list(sel_lights or [])
+        if not tags:
+            st.warning("Select at least one filter.")
         elif not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
             st.warning("Add image API keys to Streamlit secrets.")
         else:
-            q = f"{style} {space} {mood} interior architecture"
+            q = " ".join(tags) + " interior architecture"
             with st.spinner("Fetching images..."):
-                st.session_state.browse_results = \
-                    search_unsplash(q, n=9) + search_pexels(q, n=9)
+                st.session_state.filter_results = search_unsplash(q, n=9) + search_pexels(q, n=9)
 
-    results = (st.session_state.filter_results or st.session_state.browse_results)
+    fa2, _ = st.columns([2, 5])
+    with fa2:
+        if st.button("Browse from Brief", use_container_width=True):
+            sp = st.session_state.brief_space; mo = st.session_state.brief_mood
+            if not sp or not mo: st.warning("Set a brief on the Home page first.")
+            elif not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
+                st.warning("Add image API keys to Streamlit secrets.")
+            else:
+                q = f"{st.session_state.brief_style} {sp} {mo} interior architecture"
+                with st.spinner("Fetching images..."):
+                    st.session_state.browse_results = search_unsplash(q, n=9) + search_pexels(q, n=9)
+
+    results = st.session_state.filter_results or st.session_state.browse_results
     if results:
-        st.markdown(f"<p style='color:#3D5299;font-size:0.85rem;margin:1rem 0'>"
+        st.markdown(f"<p style='color:#3D5299;font-size:0.82rem;margin:1rem 0'>"
                     f"Showing {len(results)} images</p>", unsafe_allow_html=True)
-        render_image_grid(results, key_prefix="browse")
-
+        render_image_grid(results, key_prefix="br")
         if len(st.session_state.comparison_images) == 2:
             st.divider()
-            st.markdown("<div class='section-tag'>Comparison</div>", unsafe_allow_html=True)
+            st.markdown('<div class="zn-badge-small">● COMPARISON</div>', unsafe_allow_html=True)
             ca, cb = st.columns(2)
             for col, img in zip([ca, cb], st.session_state.comparison_images):
                 with col:
-                    st.markdown(f"<div class='compare-label'>{img['source'].upper()} — {img['author']}</div>",
-                                unsafe_allow_html=True)
+                    st.caption(f"{img['source'].upper()} — {img['author']}")
                     st.image(img["full"], use_container_width=True)
                     st.markdown(f"[Open original ↗]({img['link']})")
             if st.button("Clear comparison"):
-                st.session_state.comparison_images = []
-                st.rerun()
-        st.success(f"{len(results)} images loaded — click **+ Board** to add to your mood board.")
+                st.session_state.comparison_images = []; st.rerun()
     else:
-        st.info("Select filters above and click **Browse Images**, or use **Browse from Brief** to use your current brief.")
+        st.info("Select filters and click **Browse Images**, or use **Browse from Brief**.")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE: Palette
+# PALETTE
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Palette":
-    st.markdown("<div class='section-tag'>Color extraction</div>", unsafe_allow_html=True)
-    st.header("Color Palette Extractor")
-    st.markdown(
-        "<p style='color:#3D5299;margin-top:-0.4rem;margin-bottom:1.8rem;'>"
-        "Paste any image URL to extract its dominant color palette as hex swatches.</p>",
-        unsafe_allow_html=True)
+    st.markdown('<div class="zn-page-header">'
+                '<div class="zn-badge-small">● COLOR EXTRACTION</div>'
+                '<h2 class="zn-page-title">Palette Extractor</h2></div>',
+                unsafe_allow_html=True)
 
-    palette_url = st.text_input("Image URL",
-        placeholder="https://images.unsplash.com/photo-...",
-        label_visibility="collapsed")
+    st.markdown('<div class="zn-card">', unsafe_allow_html=True)
+    palette_url = st.text_input("Image URL", placeholder="https://images.unsplash.com/photo-...")
     n_colors = st.slider("Number of colors", 3, 10, 6)
-    palette_btn = st.button("Extract Palette", type="primary")
-
-    if palette_btn:
+    if st.button("Extract Palette", type="primary"):
         if not palette_url.strip():
             st.warning("Paste an image URL first.")
         else:
-            with st.spinner("Extracting palette..."):
+            with st.spinner("Extracting..."):
                 hexes = extract_palette(palette_url.strip(), n=n_colors)
             if not hexes:
-                st.warning("Could not extract palette — try a direct image URL (jpg/png).")
+                st.warning("Could not extract palette — try a direct image URL (.jpg/.png).")
             else:
-                swatches_html = "".join(
-                    f"<div class='swatch'>"
-                    f"<div class='swatch-block' style='background:{h}'></div>"
-                    f"<div class='swatch-hex'>{h}</div></div>"
-                    for h in hexes)
-                st.markdown(f"<div class='swatch-row'>{swatches_html}</div>",
-                            unsafe_allow_html=True)
-
-                col_dl, _ = st.columns([1, 3])
-                with col_dl:
-                    st.download_button("Download palette CSV",
-                                       ",".join(hexes).encode(),
+                st.markdown(
+                    "<div class='swatch-row'>" +
+                    "".join(f"<div class='swatch'>"
+                             f"<div class='swatch-block' style='background:{h}'></div>"
+                             f"<div class='swatch-hex'>{h}</div></div>"
+                            for h in hexes) + "</div>", unsafe_allow_html=True)
+                dl_col, _ = st.columns([1, 3])
+                with dl_col:
+                    st.download_button("Download CSV", ",".join(hexes).encode(),
                                        "palette.csv", "text/csv")
                 st.success(f"Extracted {len(hexes)} colors.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE: Board
+# BOARD
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Board":
-    st.markdown("<div class='section-tag'>Export</div>", unsafe_allow_html=True)
-    st.header("Mood Board")
+    st.markdown('<div class="zn-page-header">'
+                '<div class="zn-badge-small">● EXPORT</div>'
+                '<h2 class="zn-page-title">Mood Board</h2></div>',
+                unsafe_allow_html=True)
 
     if not st.session_state.selected_images:
-        st.info("Browse images on the **Browse** page and click **+ Board** to start building your mood board here.")
+        st.info("Browse images on **Browse** and click **+ Board** to add them here.")
     else:
-        imgs  = st.session_state.selected_images
-        n_sel = len(imgs)
-        st.markdown(
-            f"<p style='color:#3D5299;font-size:0.9rem;'>{n_sel} image{'s' if n_sel!=1 else ''} selected</p>",
-            unsafe_allow_html=True)
-
-        preview_cols = st.columns(min(n_sel, 4))
+        imgs = st.session_state.selected_images
+        st.markdown(f"<p style='color:#3D5299;font-size:0.88rem'>{len(imgs)} image(s) selected</p>",
+                    unsafe_allow_html=True)
+        prev_cols = st.columns(min(len(imgs), 4))
         for i, img in enumerate(imgs):
-            with preview_cols[i % 4]:
+            with prev_cols[i % 4]:
                 st.image(img["thumb"], use_container_width=True)
                 if st.button("Remove", key=f"rm_{i}", use_container_width=True):
-                    st.session_state.selected_images.pop(i)
-                    st.rerun()
-
-        st.markdown("---")
-        gc1, gc2, gc3 = st.columns([1, 1, 2])
+                    st.session_state.selected_images.pop(i); st.rerun()
+        st.divider()
+        gc1, gc2, gc3 = st.columns([1.2, 1.5, 2])
         with gc1:
-            mb_cols = st.selectbox("Grid columns", [2, 3, 4], index=1)
+            mb_cols = st.selectbox("Grid columns", [2,3,4], index=1)
         with gc2:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Generate Mood Board", type="primary", use_container_width=True):
@@ -721,129 +845,64 @@ elif page == "Board":
                     png = create_moodboard(imgs, cols=mb_cols)
                 if png:
                     st.image(png)
-                    st.download_button("Download PNG", png, "moodboard.png",
-                                       "image/png", use_container_width=True)
+                    st.download_button("Download PNG", png, "moodboard.png", "image/png", use_container_width=True)
                     st.success("Mood board ready.")
                 else:
-                    st.warning("Could not load images — check URLs are accessible.")
+                    st.warning("Could not load images.")
         with gc3:
-            if st.button("Clear Board", use_container_width=True):
-                st.session_state.selected_images = []
-                st.rerun()
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Clear All", use_container_width=True):
+                st.session_state.selected_images = []; st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE: Prompt
+# PROMPT
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Prompt":
-    st.markdown("<div class='section-tag'>AI generation</div>", unsafe_allow_html=True)
-    st.header("AI Prompt Generator")
-    st.markdown(
-        "<p style='color:#3D5299;margin-top:-0.4rem;margin-bottom:1.8rem;'>"
-        "Generate a ready-to-paste Midjourney or Stable Diffusion prompt from your brief.</p>",
-        unsafe_allow_html=True)
+    st.markdown('<div class="zn-page-header">'
+                '<div class="zn-badge-small">● AI GENERATION</div>'
+                '<h2 class="zn-page-title">Prompt Generator</h2></div>',
+                unsafe_allow_html=True)
 
-    platform = st.radio("Platform", ["Midjourney", "Stable Diffusion", "Both"],
-                        horizontal=True, label_visibility="collapsed")
+    platform = st.radio("Platform", ["Midjourney", "Stable Diffusion", "Both"], horizontal=True)
 
-    # Allow overriding the brief inline (widgets always render; expander just collapses them)
-    p_space, p_style, p_mood, p_bg = space, style, mood, background
+    p_space = st.session_state.brief_space or ""
+    p_style = st.session_state.brief_style
+    p_mood  = st.session_state.brief_mood  or ""
+    p_bg    = st.session_state.brief_background
+
     with st.expander("Override brief for this prompt"):
         oc1, oc2 = st.columns(2)
         with oc1:
-            p_space = st.text_input("Space", value=space or "", key="p_space")
-            p_style = st.selectbox("Style", STYLE_OPTIONS,
-                                   index=STYLE_OPTIONS.index(style) if style in STYLE_OPTIONS else 0,
-                                   key="p_style")
+            p_space = st.text_input("Space",  value=p_space, key="ps")
+            p_style = st.selectbox("Style",   STYLE_OPTIONS,
+                                   index=STYLE_OPTIONS.index(p_style) if p_style in STYLE_OPTIONS else 0, key="pst")
         with oc2:
-            p_mood  = st.text_input("Mood", value=mood or "", key="p_mood")
+            p_mood  = st.text_input("Mood",   value=p_mood,  key="pm")
             p_bg    = st.selectbox("Background", BG_OPTIONS,
-                                   index=BG_OPTIONS.index(background) if background in BG_OPTIONS else 0,
-                                   key="p_bg")
+                                   index=BG_OPTIONS.index(p_bg) if p_bg in BG_OPTIONS else 0, key="pb")
 
-    prompt_btn = st.button("Generate Prompt", type="primary")
-
-    if prompt_btn:
+    if st.button("Generate Prompt", type="primary"):
         if not p_space or not p_mood:
-            st.warning("Fill in Space and Mood (in Brief or the override above).")
+            st.warning("Fill in Space and Mood (in Home brief or override above).")
         else:
             if platform == "Midjourney":
                 instr = "Generate a detailed Midjourney prompt only. End with --ar 16:9 --v 6.1 --style raw"
             elif platform == "Stable Diffusion":
-                instr = ("Generate a Stable Diffusion prompt. Include positive prompt tags (comma-separated), "
+                instr = ("Generate a Stable Diffusion prompt with positive comma-separated tags, "
                          "then a blank line, then 'Negative prompt:' with negative tags.")
             else:
-                instr = ("Generate both:\n"
-                         "1) Midjourney prompt (end with --ar 16:9 --v 6.1 --style raw)\n"
+                instr = ("Generate both:\n1) Midjourney prompt (end with --ar 16:9 --v 6.1 --style raw)\n"
                          "2) Stable Diffusion prompt with positive tags and Negative prompt: line.")
-
-            full_prompt = (
-                f"{instr}\n"
-                f"Brief: Space: {p_space}, Style: {p_style}, Mood: {p_mood}, Background: {p_bg}.\n"
-                f"Include: camera angle, lighting quality, material palette, atmosphere, color grading. "
-                f"Make it specific and evocative for architectural/interior visualization.")
-
+            full = (f"{instr}\nBrief: Space: {p_space}, Style: {p_style}, Mood: {p_mood}, Background: {p_bg}.\n"
+                    f"Include camera angle, lighting quality, material palette, atmosphere, color grading.")
             with st.spinner("Crafting prompt..."):
-                response = client.messages.create(
-                    model="claude-haiku-4-5-20251001", max_tokens=600,
-                    messages=[{"role": "user", "content": full_prompt}])
-            result = response.content[0].text.strip()
-
-            st.markdown(f"<div class='prompt-box'>{result}</div>", unsafe_allow_html=True)
-            dl1, _ = st.columns([1, 3])
-            with dl1:
-                st.download_button("Download as .txt", result.encode(),
-                                   "render_prompt.txt", "text/plain")
-            st.success("Prompt ready — paste directly into Midjourney or your SD interface.")
-    else:
-        st.info("Set your brief then click **Generate Prompt**.")
-
-    # Filter-based scoring section on Prompt page
-    st.divider()
-    st.markdown("<div class='section-tag'>Score existing images</div>", unsafe_allow_html=True)
-    st.subheader("Filter & Score Images")
-    st.markdown(
-        "<p style='color:#3D5299;font-size:0.9rem;'>Paste image URLs to score render-readiness — "
-        "no prompts needed for browsing, but Claude scores them here.</p>", unsafe_allow_html=True)
-
-    url_input = st.text_area("Image URLs (one per line)", height=120,
-        placeholder="https://i.pinimg.com/...\nhttps://images.unsplash.com/...",
-        label_visibility="collapsed")
-    check_btn = st.button("Check Render-Readiness", type="primary")
-
-    if check_btn:
-        urls = [u.strip() for u in url_input.splitlines() if u.strip()]
-        if not urls:
-            st.warning("Paste at least one image URL.")
-        else:
-            score_prompt = (
-                f"Rate each image URL for Photoshop render use 1-10. "
-                f"Criteria: clean/white background, matches {p_style} {p_mood} brief, good composition. "
-                f"Return a markdown table: URL | Score | Reason. Show only scores 6+.\n"
-                + "\n".join(urls))
-            with st.spinner("Scoring images..."):
-                resp = client.messages.create(
-                    model="claude-haiku-4-5-20251001", max_tokens=1024,
-                    messages=[{"role": "user", "content": score_prompt}])
+                resp = client.messages.create(model="claude-haiku-4-5-20251001", max_tokens=600,
+                    messages=[{"role":"user","content":full}])
             result = resp.content[0].text.strip()
-            st.markdown(result)
-
-            rows = []
-            for line in result.splitlines():
-                if "|" in line and not re.match(r"^[\s|:-]+$", line):
-                    cells = [c.strip() for c in line.strip().strip("|").split("|")]
-                    if cells and cells[0].lower() not in ("url", ""):
-                        rows.append(cells)
-            if rows:
-                buf = io.StringIO()
-                csv.writer(buf).writerow(["URL","Score","Reason"])
-                csv.writer(buf).writerows(rows)
-                _, dl_col = st.columns([3, 1])
-                with dl_col:
-                    st.download_button("Download CSV", buf.getvalue().encode(),
-                                       "scored_images.csv", "text/csv",
-                                       use_container_width=True)
-            passed, total = len(rows), len(urls)
-            if passed:
-                st.success(f"{passed} of {total} images scored 6+ — ready to download.")
-            else:
-                st.info(f"None of the {total} images scored 6+ for this brief.")
+            st.markdown(f"<div class='prompt-box'>{result}</div>", unsafe_allow_html=True)
+            dl_col, _ = st.columns([1,3])
+            with dl_col:
+                st.download_button("Download .txt", result.encode(), "prompt.txt", "text/plain")
+            st.success("Prompt ready — paste directly into Midjourney or SD.")
+    else:
+        st.info("Set your brief on the **Home** page then click **Generate Prompt**.")
