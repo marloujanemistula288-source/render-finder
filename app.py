@@ -19,12 +19,15 @@ _defaults = {
     "brief_mood": "", "brief_background": "White/Isolated",
     "template_selector": "— Choose a template —",
     "page": "Brief",
+    "main_nav": "Home",
 }
 for k, v in _defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
 PAGES = ["Brief", "Search", "Browse", "Palette", "Board", "Prompt"]
+PAGE_TO_NAV = {"Brief":"Home","Search":"Search","Browse":"Browse","Palette":"Palette","Board":"Board","Prompt":"Prompt"}
+NAV_TO_PAGE = {"Home":"Brief","Search":"Search","Browse":"Browse","Palette":"Palette","Board":"Board","Prompt":"Prompt"}
 STYLE_OPTIONS = ["Dreamy", "Dark Moody", "Minimal", "Maximalist", "Realistic CGI"]
 BG_OPTIONS    = ["White/Isolated", "Scene", "Any"]
 FILTER_SPACES = ["Living Room","Bedroom","Kitchen","Office","Courtyard","Exterior","Dining Room","Studio","Bathroom"]
@@ -49,10 +52,14 @@ def get_secret(k):
 client = anthropic.Anthropic(api_key=get_secret("ANTHROPIC_API_KEY"))
 
 # ── Navigation (session state only — never HTML links) ─────────────────────────
+# Sync page ↔ main_nav (segmented control uses main_nav key)
+if "main_nav" in st.session_state and st.session_state.main_nav:
+    st.session_state.page = NAV_TO_PAGE.get(st.session_state.main_nav, st.session_state.page)
 page = st.session_state.page
 
 def go_to(p):
     st.session_state.page = p
+    st.session_state.main_nav = PAGE_TO_NAV.get(p, "Home")
     st.rerun()
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -185,43 +192,11 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
     pointer-events: none; z-index: 1;
 }
 
-/* Topbar row — styled via CSS, scrolls with page (no JS needed) */
-.zn-topbar-wrap {
-    background: rgba(242,243,249,0.94);
-    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-    border-bottom: 1px solid rgba(22,53,204,0.07);
-    margin: -1.5rem -3.5rem 1.5rem -3.5rem;
-    padding: 0 3.5rem;
-    min-height: 62px;
-    display: flex; align-items: center;
-    position: relative; z-index: 100;
-}
-
 /* Main container */
 .main .block-container {
     padding-top: 1.5rem !important; padding-left: 3.5rem !important;
     padding-right: 3.5rem !important; padding-bottom: 4rem !important;
-    max-width: 100% !important; position: relative; z-index: 10;
-}
-
-/* ── Nav link buttons (marker-div targeting) ──
-   Usage: render <div class="znav [active]"></div> immediately before st.button()
-   The CSS adjacent-sibling selector styles that specific button.              */
-div.znav + [data-testid="stButton"] > button {
-    background: transparent !important; border: none !important;
-    box-shadow: none !important; color: #8892C0 !important;
-    font-size: 0.74rem !important; font-weight: 500 !important;
-    letter-spacing: 0.07em !important; text-transform: uppercase !important;
-    padding: 0 0.3rem !important; height: 62px !important;
-    border-radius: 0 !important; width: 100% !important;
-    border-bottom: 2px solid transparent !important;
-    transition: color 0.18s !important;
-}
-div.znav + [data-testid="stButton"] > button:hover {
-    color: #0D1F8A !important; background: transparent !important;
-}
-div.znav.active + [data-testid="stButton"] > button {
-    color: #0D1F8A !important; border-bottom-color: #0D1F8A !important;
+    max-width: 100% !important;
 }
 
 /* Logo area */
@@ -232,44 +207,50 @@ div.znav.active + [data-testid="stButton"] > button {
     white-space: nowrap;
 }
 
-/* Connect / BRIEF button in topbar */
-div.znav-connect + [data-testid="stButton"] > button {
-    background: #0D1F8A !important; color: #fff !important;
-    border: none !important; border-radius: 50px !important;
-    font-size: 0.74rem !important; font-weight: 600 !important;
-    letter-spacing: 0.07em !important; text-transform: uppercase !important;
-    padding: 0.38rem 1.1rem !important; height: auto !important;
-    min-height: 36px !important;
-    box-shadow: 0 3px 14px rgba(13,31,138,0.28) !important;
-    transition: background 0.18s !important;
+/* ── Segmented control → flat nav tabs ── */
+[data-testid="stSegmentedControl"] {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    box-shadow: none !important;
 }
-div.znav-connect + [data-testid="stButton"] > button:hover {
-    background: #1635CC !important;
+[data-testid="stSegmentedControl"] > div {
+    background: transparent !important;
+    border: none !important;
+    gap: 0 !important;
+    box-shadow: none !important;
 }
-
-/* ── Floating pill buttons (right column on Brief page) ──
-   Usage: render <div class="znfp [active]"></div> before st.button()          */
-div.znfp + [data-testid="stButton"] > button {
-    background: rgba(255,255,255,0.72) !important;
-    border: 1px solid rgba(255,255,255,0.88) !important;
-    border-radius: 50px !important; color: #0D1F8A !important;
-    font-size: 0.86rem !important; font-weight: 500 !important;
-    padding: 0.7rem 1.5rem !important; min-height: 50px !important;
-    backdrop-filter: blur(16px) !important;
-    box-shadow: 0 4px 22px rgba(0,0,0,0.09) !important;
-    justify-content: flex-start !important; text-align: left !important;
-    margin-bottom: 0 !important; width: 100% !important;
-    transition: all 0.2s !important;
+[data-testid="stSegmentedControl"] button {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    color: #8892C0 !important;
+    font-size: 0.73rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    padding: 0 0.95rem !important;
+    height: 60px !important;
+    min-height: 60px !important;
+    border-bottom: 2px solid transparent !important;
+    box-shadow: none !important;
+    transition: color 0.18s, border-color 0.18s !important;
 }
-div.znfp + [data-testid="stButton"] > button:hover {
-    background: rgba(255,255,255,0.92) !important;
-    box-shadow: 0 6px 28px rgba(0,0,0,0.13) !important;
-    transform: translateX(-3px) !important;
+[data-testid="stSegmentedControl"] button:hover {
+    background: transparent !important;
+    color: #0D1F8A !important;
+    border-bottom-color: rgba(13,31,138,0.25) !important;
 }
-div.znfp.active + [data-testid="stButton"] > button {
-    background: #0D1F8A !important; color: white !important;
-    border-color: #0D1F8A !important;
-    box-shadow: 0 6px 28px rgba(13,31,138,0.42) !important;
+[data-testid="stSegmentedControl"] button[aria-checked="true"],
+[data-testid="stSegmentedControl"] button[data-checked="true"],
+[data-testid="stSegmentedControl"] button[aria-pressed="true"],
+[data-testid="stSegmentedControl"] button[aria-selected="true"] {
+    background: transparent !important;
+    color: #0D1F8A !important;
+    font-weight: 700 !important;
+    border-bottom-color: #0D1F8A !important;
+    box-shadow: none !important;
 }
 
 /* ── Primary / secondary CTA buttons ── */
@@ -287,11 +268,11 @@ div.znfp.active + [data-testid="stButton"] > button {
     transform: translateY(-1px) !important;
 }
 .stButton > button[kind="secondary"] {
-    background: rgba(255,255,255,0.78) !important; color: #0D1F8A !important;
-    border: 1.5px solid rgba(13,31,138,0.28) !important; border-radius: 50px !important;
+    background: rgba(255,255,255,0.9) !important; color: #0D1F8A !important;
+    border: 1.5px solid rgba(13,31,138,0.22) !important; border-radius: 50px !important;
     font-family: 'Inter', sans-serif !important; font-weight: 500 !important;
     font-size: 0.76rem !important; letter-spacing: 0.07em !important;
-    text-transform: uppercase !important; backdrop-filter: blur(8px) !important;
+    text-transform: uppercase !important;
 }
 .stButton > button[kind="secondary"]:hover {
     background: rgba(13,31,138,0.06) !important; border-color: #0D1F8A !important;
@@ -322,12 +303,10 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
 
 /* ── Glass cards ── */
 .zn-card {
-    background: rgba(255,255,255,0.48);
-    backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
-    border: 1px solid rgba(255,255,255,0.82);
+    background: rgba(255,255,255,0.88);
+    border: 1px solid rgba(13,31,138,0.10);
     border-radius: 24px; padding: 1.7rem 2rem;
     box-shadow: 0 4px 32px rgba(13,31,138,0.07);
-    position: relative; z-index: 10;
 }
 .zn-card-label {
     font-size: 0.67rem; letter-spacing: 0.14em; text-transform: uppercase;
@@ -340,7 +319,7 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
 .zn-badge-pill {
     display: inline-flex; align-items: center; gap: 8px;
     padding: 0.38rem 1.05rem;
-    background: rgba(255,255,255,0.75); backdrop-filter: blur(10px);
+    background: rgba(255,255,255,0.88);
     border: 1px solid rgba(22,53,204,0.14); border-radius: 50px;
     font-size: 0.7rem; font-weight: 600; letter-spacing: 0.11em;
     color: #0D1F8A; margin-bottom: 1.5rem; font-family: 'Inter', sans-serif;
@@ -381,8 +360,8 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
 
 /* ── Query cards ── */
 .qcard {
-    background: rgba(255,255,255,0.62); backdrop-filter: blur(16px);
-    border: 1px solid rgba(255,255,255,0.85); border-radius: 20px;
+    background: rgba(255,255,255,0.88);
+    border: 1px solid rgba(13,31,138,0.08); border-radius: 20px;
     padding: 1.2rem 1.4rem 1rem; margin-bottom: 0.9rem;
     box-shadow: 0 2px 16px rgba(13,31,138,0.06);
 }
@@ -443,11 +422,9 @@ st.markdown('<div class="zn-blob" aria-hidden="true"></div>'
             unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Topbar  — Streamlit buttons styled as nav links via the marker-div trick
-# JS makes the first stHorizontalBlock fixed via .zn-topnav class
+# Topbar  — logo | segmented-control nav | brief button
 # ══════════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="zn-topbar-wrap">', unsafe_allow_html=True)
-c_logo, c1, c2, c3, c4, c5, c6, c_conn = st.columns([2, 0.9, 0.9, 0.95, 0.95, 0.85, 0.85, 1.7])
+c_logo, c_nav, c_conn = st.columns([2.2, 6.8, 1.8])
 
 with c_logo:
     st.markdown("""
@@ -466,24 +443,22 @@ with c_logo:
       RENDER FINDER
     </div>""", unsafe_allow_html=True)
 
-nav_items = [("HOME","Brief"),("SEARCH","Search"),("BROWSE","Browse"),
-             ("PALETTE","Palette"),("BOARD","Board"),("PROMPT","Prompt")]
-for col, (label, p) in zip([c1,c2,c3,c4,c5,c6], nav_items):
-    with col:
-        active_cls = "znav active" if page == p else "znav"
-        st.markdown(f'<div class="{active_cls}"></div>', unsafe_allow_html=True)
-        if st.button(label, key=f"nav_{p}", use_container_width=True):
-            go_to(p)
+with c_nav:
+    st.segmented_control(
+        "nav",
+        options=["Home", "Search", "Browse", "Palette", "Board", "Prompt"],
+        key="main_nav",
+        label_visibility="collapsed",
+    )
 
 with c_conn:
     brief_lbl = (st.session_state.brief_space[:10]+"…"
                  if len(st.session_state.brief_space) > 10
                  else st.session_state.brief_space) if st.session_state.brief_space else "BRIEF"
-    st.markdown('<div class="znav-connect"></div>', unsafe_allow_html=True)
-    if st.button(f"{brief_lbl} ●", key="nav_connect", use_container_width=True):
+    if st.button(f"{brief_lbl} ●", key="nav_connect", type="primary", use_container_width=True):
         go_to("Brief")
 
-st.markdown('</div>', unsafe_allow_html=True)  # close zn-topbar-wrap
+st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: Brief  (Zeronode hero layout)
@@ -519,27 +494,23 @@ if page == "Brief":
             if st.button("BROWSE IMAGES", key="cta_browse", use_container_width=True):
                 go_to("Browse")
 
-    # Three floating right pills (Transparency / Regeneration / Intelligence equivalent)
+    # Three floating right action pills
     with pills_col:
-        st.markdown("<div style='padding-top:4rem'>", unsafe_allow_html=True)
+        st.markdown("<div style='padding-top:4rem'></div>", unsafe_allow_html=True)
         fp_items = [
             ("⊕  Search Refs",   "Search"),
             ("⊟  Browse Images", "Browse"),
             ("✦  AI Prompt",     "Prompt"),
         ]
         for label, p in fp_items:
-            active_cls = "znfp active" if page == p else "znfp"
-            st.markdown(f'<div class="{active_cls}"></div>', unsafe_allow_html=True)
             if st.button(label, key=f"fp_{p}", use_container_width=True):
                 go_to(p)
-        st.markdown("</div>", unsafe_allow_html=True)
 
     # Bottom glass cards
     st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
     card_l, _, card_r = st.columns([4.5, 0.4, 2.6])
 
     with card_l:
-        st.markdown('<div class="zn-card">', unsafe_allow_html=True)
         st.markdown('<div class="zn-card-label">YOUR BRIEF</div>', unsafe_allow_html=True)
         st.selectbox("template", list(TEMPLATES.keys()), key="template_selector",
                      on_change=on_template_change, label_visibility="collapsed")
@@ -549,10 +520,8 @@ if page == "Brief":
         with ci2:
             st.selectbox("Style", STYLE_OPTIONS, key="brief_style")
         st.text_input("Mood", placeholder="e.g. warm, earthy, editorial", key="brief_mood")
-        st.markdown("</div>", unsafe_allow_html=True)
 
     with card_r:
-        st.markdown('<div class="zn-card">', unsafe_allow_html=True)
         st.markdown('<div class="zn-card-label">SESSION</div>', unsafe_allow_html=True)
         n_b = len(st.session_state.selected_images)
         n_h = len(st.session_state.history)
@@ -570,7 +539,6 @@ if page == "Brief":
         if n_b:
             if st.button("Open Mood Board →", use_container_width=True):
                 go_to("Board")
-        st.markdown("</div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: Search
