@@ -376,28 +376,19 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
     box-shadow: none !important;
     border: none !important;
 }
-
-/* ── Floating action pills (frosted glass over blob) ── */
-.fp-container { display: flex; flex-direction: column; gap: 0.65rem; position: relative; z-index: 20; }
-.fp-container .stButton > button {
-    background: rgba(255,255,255,0.13) !important;
-    border: 1px solid rgba(255,255,255,0.38) !important;
-    border-radius: 50px !important;
-    color: rgba(255,255,255,0.96) !important;
-    font-size: 0.88rem !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.03em !important;
-    text-transform: none !important;
-    padding: 0.78rem 1.55rem !important;
-    box-shadow: 0 4px 28px rgba(0,0,30,0.22), inset 0 1px 0 rgba(255,255,255,0.22) !important;
-    text-align: left !important;
-    width: 100% !important;
-    transition: all 0.2s !important;
+/* Streamlit puts data-testid ON the button element itself for segmented control */
+button[data-testid^="stBaseButton-segmented_control"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #8892C0 !important;
 }
-.fp-container .stButton > button:hover {
-    background: rgba(255,255,255,0.22) !important;
-    transform: translateY(-2px) !important;
-    box-shadow: 0 10px 40px rgba(0,0,30,0.28), inset 0 1px 0 rgba(255,255,255,0.30) !important;
+button[data-testid="stBaseButton-segmented_controlActive"] {
+    background: transparent !important;
+    color: #0D1F8A !important;
+    font-weight: 700 !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
 /* ── Primary / secondary CTA buttons ── */
@@ -428,6 +419,27 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
     background: rgba(255,255,255,0.82) !important; color: #0D1F8A !important;
     border: 1.5px solid rgba(13,31,138,0.25) !important; border-radius: 50px !important;
     font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;
+}
+
+/* ── Floating pills — data-testid is ON the button itself; comes after secondary rule ── */
+[data-testid="stColumn"]:has(.fp-container) button[data-testid^="stBaseButton"] {
+    background: rgba(255,255,255,0.14) !important;
+    border: 1px solid rgba(255,255,255,0.40) !important;
+    border-radius: 50px !important;
+    color: rgba(255,255,255,0.96) !important;
+    font-size: 0.88rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.03em !important;
+    text-transform: none !important;
+    padding: 0.78rem 1.55rem !important;
+    box-shadow: 0 4px 28px rgba(0,0,30,0.22), inset 0 1px 0 rgba(255,255,255,0.22) !important;
+    width: 100% !important;
+    transition: all 0.2s !important;
+}
+[data-testid="stColumn"]:has(.fp-container) button[data-testid^="stBaseButton"]:hover {
+    background: rgba(255,255,255,0.24) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 10px 40px rgba(0,0,30,0.28), inset 0 1px 0 rgba(255,255,255,0.30) !important;
 }
 
 /* ── Inputs ── */
