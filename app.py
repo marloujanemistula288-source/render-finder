@@ -5,6 +5,7 @@ import os
 import csv
 import io
 import re
+import json
 import requests
 from dotenv import load_dotenv
 
@@ -17,6 +18,13 @@ def get_secret(key):
 
 client = anthropic.Anthropic(api_key=get_secret("ANTHROPIC_API_KEY"))
 
+try:
+    from colorthief import ColorThief
+    _COLORTHIEF = True
+except ImportError:
+    _COLORTHIEF = False
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
 def search_unsplash(query, n=9):
     key = get_secret("UNSPLASH_ACCESS_KEY")
     if not key:
@@ -53,26 +61,53 @@ def search_pexels(query, n=9):
         for p in resp.json().get("photos", [])
     ]
 
+@st.cache_data(show_spinner=False)
+def get_color_palette(image_url, num_colors=5):
+    if not _COLORTHIEF:
+        return []
+    try:
+        resp = requests.get(image_url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+        ct = ColorThief(io.BytesIO(resp.content))
+        palette = ct.get_palette(color_count=num_colors, quality=10)
+        return [f"#{r:02x}{g:02x}{b:02x}" for r, g, b in palette]
+    except Exception:
+        return []
+
+def image_card_html(img_url, link, author, source):
+    palette = get_color_palette(img_url)
+    badge_class = "badge-unsplash" if source == "unsplash" else "badge-pexels"
+    badge_label = "Unsplash" if source == "unsplash" else "Pexels"
+    swatches = "".join(
+        f'<div class="swatch" style="background:{c};" title="{c}"></div>'
+        for c in palette
+    ) if palette else ""
+    palette_row = f'<div class="palette-row">{swatches}</div>' if swatches else ""
+    return f"""
+    <div class="img-card">
+        <a href="{link}" target="_blank" rel="noopener">
+            <img src="{img_url}" style="width:100%;border-radius:10px;display:block;object-fit:cover;height:160px;">
+        </a>
+        {palette_row}
+        <div style="margin-top:5px;">
+            <span class="badge {badge_class}">{badge_label}</span>
+            <a href="{link}" target="_blank"
+               style="font-size:0.72rem;color:#5A5A6E;text-decoration:none;margin-left:4px;">{author}</a>
+        </div>
+    </div>"""
+
 NOISE = "data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"
 
+# ── Styles ─────────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
 
-html, body, [class*="css"] {{
-    font-family: 'Space Grotesk', sans-serif;
-}}
+html, body, [class*="css"] {{ font-family: 'Space Grotesk', sans-serif; }}
+.stApp {{ background-color: #EAEAED; }}
 
-/* ── Page base ── */
-.stApp {{
-    background-color: #EAEAED;
-}}
-
-/* ── LEFT PANEL: clean white sidebar ── */
 [data-testid="stSidebar"] {{
     background: #F4F4F7 !important;
     border-right: 1px solid rgba(200,200,215,0.55) !important;
-    backdrop-filter: none !important;
 }}
 [data-testid="stSidebar"] h1,
 [data-testid="stSidebar"] h2,
@@ -81,9 +116,7 @@ html, body, [class*="css"] {{
 [data-testid="stSidebar"] p {{ color: #0C0C12 !important; }}
 [data-testid="stSidebarNav"] {{ display: none; }}
 
-/* ── RIGHT AREA: gradient blob on main content ── */
-[data-testid="stMain"],
-section.main {{
+[data-testid="stMain"], section.main {{
     background:
         radial-gradient(ellipse at 80% 64%, #1533E8 0%, rgba(21,51,232,0.72) 19%, rgba(21,51,232,0.14) 46%, transparent 63%),
         radial-gradient(ellipse at 95% 18%, rgba(21,51,232,0.28) 0%, transparent 40%),
@@ -91,10 +124,7 @@ section.main {{
         #EAEAED !important;
     background-attachment: fixed !important;
 }}
-
-/* Grain texture over main area */
-[data-testid="stMain"]::before,
-section.main::before {{
+[data-testid="stMain"]::before, section.main::before {{
     content: '';
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -103,16 +133,12 @@ section.main::before {{
     pointer-events: none;
     z-index: 0;
 }}
-
-/* Transparent block containers so gradient shows */
-.block-container,
-[data-testid="stMainBlockContainer"] {{
+.block-container, [data-testid="stMainBlockContainer"] {{
     background: transparent !important;
     position: relative;
     z-index: 1;
 }}
 
-/* ── Headers ── */
 h1 {{
     font-family: 'Space Grotesk', sans-serif !important;
     font-size: 1.9rem !important;
@@ -128,124 +154,117 @@ h2, h3 {{
     letter-spacing: -0.01em;
 }}
 
-/* ── Hero section ── */
-.hero-section {{
-    padding: 2.6rem 0 2rem;
-    max-width: 520px;
-}}
+/* Hero */
+.hero-section {{ padding: 2.6rem 0 2rem; max-width: 520px; }}
 .hero-tag {{
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: rgba(255,255,255,0.55);
-    border: 1px solid rgba(255,255,255,0.78);
-    border-radius: 50px;
-    padding: 0.32rem 1rem;
-    font-size: 0.62rem;
-    font-weight: 700;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: #1533E8;
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    background: rgba(255,255,255,0.55); border: 1px solid rgba(255,255,255,0.78);
+    border-radius: 50px; padding: 0.32rem 1rem;
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.15em;
+    text-transform: uppercase; color: #1533E8;
     font-family: 'Space Mono', monospace;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     margin-bottom: 1.3rem;
 }}
-.tag-dot {{
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: #1533E8;
-    flex-shrink: 0;
-}}
+.tag-dot {{ width: 6px; height: 6px; border-radius: 50%; background: #1533E8; flex-shrink: 0; }}
 .hero-title {{
-    font-size: 3rem;
-    font-weight: 600;
-    color: #0C0C12;
-    letter-spacing: -0.04em;
-    line-height: 1.06;
-    margin-bottom: 1rem;
+    font-size: 3rem; font-weight: 600; color: #0C0C12;
+    letter-spacing: -0.04em; line-height: 1.06; margin-bottom: 1rem;
     font-family: 'Space Grotesk', sans-serif;
 }}
-.hero-title em {{
-    font-style: italic;
-    font-weight: 300;
-    color: #1533E8;
+.hero-title em {{ font-style: italic; font-weight: 300; color: #1533E8; }}
+.hero-body {{ font-size: 0.92rem; color: #5A5A6E; line-height: 1.65; max-width: 400px; }}
+
+/* Brief card */
+.brief-card {{
+    background: rgba(255,255,255,0.58);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.78);
+    border-radius: 18px; padding: 1.4rem 1.5rem; margin-bottom: 1rem;
 }}
-.hero-body {{
-    font-size: 0.92rem;
-    color: #5A5A6E;
-    line-height: 1.65;
-    font-weight: 400;
-    max-width: 400px;
+.brief-extracted {{
+    display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.8rem 0;
+}}
+.brief-chip {{
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    background: rgba(21,51,232,0.08); border: 1px solid rgba(21,51,232,0.2);
+    border-radius: 50px; padding: 0.28rem 0.85rem;
+    font-size: 0.7rem; font-weight: 500; color: #1533E8;
+    font-family: 'Space Grotesk', sans-serif;
+}}
+.brief-chip-label {{
+    font-size: 0.58rem; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; opacity: 0.6; margin-right: 2px;
+    font-family: 'Space Mono', monospace;
 }}
 
-/* ── Frosted glass query cards ── */
+/* Query cards */
 .query-card {{
     background: rgba(255,255,255,0.58);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255,255,255,0.78);
-    border-radius: 18px;
-    overflow: hidden;
-    margin-bottom: 1rem;
+    border-radius: 18px; overflow: hidden; margin-bottom: 1rem;
 }}
-.query-card-inner {{
-    padding: 1.2rem 1.3rem 1.1rem;
-}}
+.query-card-inner {{ padding: 1.2rem 1.3rem 1.1rem; }}
 .card-label {{
-    font-size: 0.58rem;
-    color: #1533E8;
-    font-weight: 700;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    font-family: 'Space Mono', monospace;
-    margin-bottom: 0.35rem;
+    font-size: 0.58rem; color: #1533E8; font-weight: 700;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    font-family: 'Space Mono', monospace; margin-bottom: 0.35rem;
 }}
 .card-query-text {{
-    font-size: 0.95rem;
-    color: #0C0C12;
-    font-weight: 500;
-    font-style: italic;
-    margin-bottom: 0.9rem;
-    line-height: 1.4;
+    font-size: 0.95rem; color: #0C0C12; font-weight: 500;
+    font-style: italic; margin-bottom: 0.9rem; line-height: 1.4;
 }}
 
-/* ── Preview strip ── */
-.preview-strip {{
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.85rem;
-}}
+/* Preview strip (in query cards) */
+.preview-strip {{ display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }}
 .preview-strip img {{
-    width: calc(33.33% - 0.34rem);
-    height: 88px;
-    object-fit: cover;
-    border-radius: 10px;
+    width: calc(33.33% - 0.34rem); height: 88px;
+    object-fit: cover; border-radius: 8px;
     border: 1px solid rgba(255,255,255,0.6);
 }}
 .preview-placeholder {{
-    width: calc(33.33% - 0.34rem);
-    height: 88px;
-    background: rgba(255,255,255,0.28);
-    border-radius: 10px;
+    width: calc(33.33% - 0.34rem); height: 88px;
+    background: rgba(255,255,255,0.28); border-radius: 8px;
     border: 1px solid rgba(255,255,255,0.5);
 }}
+
+/* Preview strip palettes (3 palettes side by side) */
+.strip-palettes {{ display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }}
+.strip-palette {{
+    width: calc(33.33% - 0.34rem);
+    display: flex; gap: 2px;
+}}
+.strip-palette .swatch {{
+    flex: 1; height: 8px; border-radius: 2px;
+    border: none;
+}}
+
+/* Image cards in grids */
+.img-card {{ margin-bottom: 0.5rem; }}
+
+/* Color palette row */
+.palette-row {{
+    display: flex; gap: 4px; margin-top: 6px; align-items: center;
+}}
+.swatch {{
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.7);
+    flex-shrink: 0; cursor: default;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}}
+
 .btn-row {{ display: flex; flex-wrap: wrap; gap: 0.3rem; }}
 
-/* ── Platform buttons ── */
+/* Platform buttons */
 .ref-btn {{
-    display: inline-flex;
-    align-items: center;
-    padding: 0.36rem 0.9rem;
-    border-radius: 50px;
+    display: inline-flex; align-items: center;
+    padding: 0.36rem 0.9rem; border-radius: 50px;
     text-decoration: none !important;
-    font-size: 0.67rem;
-    font-weight: 500;
+    font-size: 0.67rem; font-weight: 500;
     font-family: 'Space Grotesk', sans-serif;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    transition: opacity 0.2s;
-    border: 1px solid transparent;
+    letter-spacing: 0.07em; text-transform: uppercase;
+    transition: opacity 0.2s; border: 1px solid transparent;
 }}
 .ref-btn:hover {{ opacity: 0.68; }}
 .btn-pinterest {{ background: #1533E8; color: #fff !important; }}
@@ -254,7 +273,7 @@ h2, h3 {{
 .btn-archinect {{ background: rgba(255,255,255,0.42); color: #0C0C12 !important; border: 1px solid rgba(0,0,0,0.08); }}
 .btn-arena     {{ background: rgba(21,51,232,0.1); color: #1533E8 !important; border: 1px solid rgba(21,51,232,0.2); }}
 
-/* ── Inputs ── */
+/* Inputs */
 input[type="text"], textarea {{
     background-color: rgba(255,255,255,0.88) !important;
     border: 1px solid rgba(200,200,215,0.7) !important;
@@ -274,17 +293,13 @@ input[type="text"]:focus, textarea:focus {{
     color: #0C0C12 !important;
 }}
 
-/* ── Streamlit buttons ── */
+/* Buttons */
 .stButton > button[kind="primary"] {{
-    background-color: #1533E8 !important;
-    color: #fff !important;
-    border: none !important;
-    border-radius: 50px !important;
+    background-color: #1533E8 !important; color: #fff !important;
+    border: none !important; border-radius: 50px !important;
     font-family: 'Space Grotesk', sans-serif !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    font-size: 0.74rem !important;
+    font-weight: 500 !important; letter-spacing: 0.07em;
+    text-transform: uppercase; font-size: 0.74rem !important;
 }}
 .stButton > button[kind="primary"]:hover {{ background-color: #0F25C4 !important; }}
 .stButton > button[kind="secondary"] {{
@@ -293,47 +308,28 @@ input[type="text"]:focus, textarea:focus {{
     border: 1px solid rgba(0,0,0,0.14) !important;
     border-radius: 50px !important;
     font-family: 'Space Grotesk', sans-serif !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    font-size: 0.74rem !important;
+    font-weight: 500 !important; letter-spacing: 0.07em;
+    text-transform: uppercase; font-size: 0.74rem !important;
 }}
 .stButton > button[kind="secondary"]:hover {{ background-color: rgba(255,255,255,0.88) !important; }}
 .stDownloadButton > button {{
-    background-color: #0C0C12 !important;
-    color: #EAEAED !important;
-    border: none !important;
-    border-radius: 50px !important;
+    background-color: #0C0C12 !important; color: #EAEAED !important;
+    border: none !important; border-radius: 50px !important;
     font-family: 'Space Grotesk', sans-serif !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    font-size: 0.74rem !important;
+    font-weight: 500 !important; letter-spacing: 0.07em;
+    text-transform: uppercase; font-size: 0.74rem !important;
 }}
 .stDownloadButton > button:hover {{ background-color: #1533E8 !important; }}
 
-/* ── Alerts: frosted ── */
-[data-testid="stAlert"] {{
-    border-radius: 12px !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    font-family: 'Space Grotesk', sans-serif !important;
-}}
-.stSuccess {{ background: rgba(230,235,255,0.72) !important; color: #0A1A8A !important; border-left: 3px solid #1533E8 !important; }}
-.stInfo    {{ background: rgba(255,255,255,0.52) !important; color: #0C0C12 !important; border-left: 3px solid rgba(100,100,140,0.5) !important; }}
-.stWarning {{ background: rgba(255,244,230,0.72) !important; color: #5A3000 !important; border-left: 3px solid #E88015 !important; }}
-
-/* ── Filter pills (st.pills) ── */
+/* Filter pills */
 [data-testid="stPillsInput"] button {{
     border-radius: 50px !important;
     font-family: 'Space Grotesk', sans-serif !important;
-    font-size: 0.72rem !important;
-    font-weight: 500 !important;
+    font-size: 0.72rem !important; font-weight: 500 !important;
     letter-spacing: 0.05em !important;
     background: rgba(255,255,255,0.55) !important;
     border: 1px solid rgba(200,200,215,0.65) !important;
-    color: #0C0C12 !important;
-    transition: all 0.15s !important;
+    color: #0C0C12 !important; transition: all 0.15s !important;
 }}
 [data-testid="stPillsInput"] button[aria-pressed="true"] {{
     background: #1533E8 !important;
@@ -345,27 +341,29 @@ input[type="text"]:focus, textarea:focus {{
     border-color: rgba(21,51,232,0.3) !important;
 }}
 
-/* ── Misc ── */
+/* Alerts */
+[data-testid="stAlert"] {{
+    border-radius: 12px !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    font-family: 'Space Grotesk', sans-serif !important;
+}}
+.stSuccess {{ background: rgba(230,235,255,0.72) !important; color: #0A1A8A !important; border-left: 3px solid #1533E8 !important; }}
+.stInfo    {{ background: rgba(255,255,255,0.52) !important; color: #0C0C12 !important; border-left: 3px solid rgba(100,100,140,0.5) !important; }}
+.stWarning {{ background: rgba(255,244,230,0.72) !important; color: #5A3000 !important; border-left: 3px solid #E88015 !important; }}
+
 hr {{ border-color: rgba(0,0,0,0.08) !important; }}
 .stSpinner > div {{ border-top-color: #1533E8 !important; }}
 .badge {{
-    display: inline-block;
-    padding: 0.1rem 0.5rem;
-    border-radius: 50px;
-    font-size: 0.6rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    display: inline-block; padding: 0.1rem 0.5rem;
+    border-radius: 50px; font-size: 0.6rem;
+    font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
 }}
 .badge-unsplash {{ background: #0C0C12; color: #EAEAED; }}
 .badge-pexels   {{ background: #1533E8; color: #fff; }}
 .section-tag {{
-    font-size: 0.6rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: #1533E8;
-    font-weight: 700;
-    margin-bottom: 0.2rem;
+    font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase;
+    color: #1533E8; font-weight: 700; margin-bottom: 0.2rem;
     font-family: 'Space Mono', monospace;
 }}
 </style>
@@ -380,21 +378,143 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Sidebar: clean white left panel ───────────────────────────────────────────
+# ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("<div class='section-tag'>Project Brief</div>", unsafe_allow_html=True)
     st.markdown("### Brief")
-
-    space = st.text_input("Space", placeholder="e.g. living room, courtyard, office")
-    style = st.selectbox("Style", ["Dreamy", "Dark Moody", "Minimal", "Maximalist", "Realistic CGI"])
-    mood = st.text_input("Mood", placeholder="e.g. warm and earthy, editorial, serene")
+    space  = st.text_input("Space", placeholder="e.g. living room, courtyard")
+    style  = st.selectbox("Style", ["Dreamy", "Dark Moody", "Minimal", "Maximalist", "Realistic CGI"])
+    mood   = st.text_input("Mood", placeholder="e.g. warm and earthy, editorial")
     background = st.selectbox("Background", ["White/Isolated", "Scene", "Any"])
-
     st.markdown("---")
     find_btn   = st.button("Find References", use_container_width=True, type="primary")
     browse_btn = st.button("Browse Images",   use_container_width=True)
 
-# ── Section 1: Reference Queries ───────────────────────────────────────────────
+# ── Section 00: Assignment Brief ───────────────────────────────────────────────
+st.markdown("<div class='section-tag'>00 — Brief</div>", unsafe_allow_html=True)
+st.header("Assignment Brief")
+st.markdown(
+    "<p style='color:#5A5A6E;font-size:0.88rem;margin-top:-0.5rem;margin-bottom:1rem;'>"
+    "Paste your project brief — Claude will extract key themes and find references for you.</p>",
+    unsafe_allow_html=True,
+)
+
+brief_text = st.text_area(
+    "Assignment brief",
+    height=140,
+    placeholder="e.g. Design a residential living space for a young professional couple in Singapore. The aesthetic should feel warm yet contemporary, drawing from Japanese minimalism and tropical materials. The space must balance openness with intimacy, using natural light and organic textures...",
+    label_visibility="collapsed",
+)
+parse_btn = st.button("Parse Brief & Find Images", type="primary", key="parse_brief")
+
+if parse_btn:
+    if not brief_text.strip():
+        st.warning("Paste your assignment brief first.")
+    else:
+        with st.spinner("Reading your brief..."):
+            parse_prompt = (
+                "You are helping a design student find Photoshop render references. "
+                "Parse this assignment brief and extract key information.\n\n"
+                f"Brief:\n{brief_text}\n\n"
+                "Return a JSON object with exactly these fields:\n"
+                '{"project_name": "short name", "space": "primary space type", '
+                '"style": "visual style", "mood": "mood/atmosphere", '
+                '"themes": ["theme1", "theme2", "theme3"], '
+                '"queries": ["query1", "query2", "query3", "query4", "query5"]}\n'
+                "Return valid JSON only, no other text."
+            )
+            parse_resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=512,
+                messages=[{"role": "user", "content": parse_prompt}],
+            )
+        try:
+            raw_json = parse_resp.content[0].text.strip()
+            raw_json = re.sub(r"^```(?:json)?|```$", "", raw_json, flags=re.MULTILINE).strip()
+            parsed = json.loads(raw_json)
+        except Exception:
+            st.error("Couldn't parse the brief — try simplifying it.")
+            parsed = None
+
+        if parsed:
+            chips_html = ""
+            if parsed.get("space"):
+                chips_html += f'<div class="brief-chip"><span class="brief-chip-label">Space</span>{parsed["space"]}</div>'
+            if parsed.get("style"):
+                chips_html += f'<div class="brief-chip"><span class="brief-chip-label">Style</span>{parsed["style"]}</div>'
+            if parsed.get("mood"):
+                chips_html += f'<div class="brief-chip"><span class="brief-chip-label">Mood</span>{parsed["mood"]}</div>'
+            for t in (parsed.get("themes") or []):
+                chips_html += f'<div class="brief-chip">{t}</div>'
+
+            st.markdown(f"""
+            <div class="brief-card">
+                <div style="font-size:0.58rem;color:#1533E8;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:0.5rem;">Extracted from brief</div>
+                <div style="font-size:1rem;font-weight:600;color:#0C0C12;margin-bottom:0.6rem;">{parsed.get("project_name","")}</div>
+                <div class="brief-extracted">{chips_html}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            queries = parsed.get("queries", [])
+            has_keys = bool(get_secret("UNSPLASH_ACCESS_KEY") or get_secret("PEXELS_API_KEY"))
+
+            for i, q in enumerate(queries, 1):
+                enc = urllib.parse.quote_plus(q)
+                pinterest_url = f"https://www.pinterest.com/search/pins/?q={enc}"
+                behance_url   = f"https://www.behance.net/search/projects?search={enc}"
+                google_url    = f"https://www.google.com/search?tbm=isch&q={enc}"
+                archinect_url = f"https://archinect.com/search#/?q={enc}&type=photos"
+                arena_url     = f"https://www.are.na/search/{enc}"
+
+                previews = []
+                if has_keys:
+                    previews = search_unsplash(q, n=3)
+                    if len(previews) < 3:
+                        previews += search_pexels(q, n=3 - len(previews))
+
+                if previews:
+                    strip_imgs = "".join(
+                        f'<a href="{p["link"]}" target="_blank" rel="noopener">'
+                        f'<img src="{p["thumb"]}" alt="{p["author"]}"></a>'
+                        for p in previews[:3]
+                    )
+                    # Palettes per image in strip
+                    strip_pal_cols = ""
+                    for p in previews[:3]:
+                        pal = get_color_palette(p["thumb"])
+                        swatches = "".join(f'<div class="swatch" style="background:{c};width:100%;height:8px;border-radius:2px;border:none;box-shadow:none;"></div>' for c in pal) if pal else ""
+                        strip_pal_cols += f'<div class="strip-palette">{swatches}</div>'
+                    strip_html = f'<div class="preview-strip">{strip_imgs}</div><div class="strip-palettes">{strip_pal_cols}</div>'
+                elif has_keys:
+                    strip_html = '<div class="preview-strip">' + ''.join('<div class="preview-placeholder"></div>' for _ in range(3)) + "</div>"
+                else:
+                    strip_html = ""
+
+                st.markdown(f"""
+                <div class="query-card">
+                    <div class="query-card-inner">
+                        <div class="card-label">Query {i}</div>
+                        <div class="card-query-text">{q}</div>
+                        {strip_html}
+                        <div class="btn-row">
+                            <a class="ref-btn btn-pinterest" href="{pinterest_url}" target="_blank" rel="noopener">Pinterest</a>
+                            <a class="ref-btn btn-behance"   href="{behance_url}"   target="_blank" rel="noopener">Behance</a>
+                            <a class="ref-btn btn-google"    href="{google_url}"    target="_blank" rel="noopener">Google Images</a>
+                            <a class="ref-btn btn-archinect" href="{archinect_url}" target="_blank" rel="noopener">Archinect</a>
+                            <a class="ref-btn btn-arena"     href="{arena_url}"     target="_blank" rel="noopener">Are.na</a>
+                        </div>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+
+            if not has_keys:
+                st.info("Add **UNSPLASH_ACCESS_KEY** or **PEXELS_API_KEY** to see image previews.")
+            st.success(f"{len(queries)} queries extracted from brief.")
+else:
+    st.info("Paste your assignment brief above and click **Parse Brief & Find Images**.")
+
+st.divider()
+
+# ── Section 01: AI Reference Queries ───────────────────────────────────────────
 st.markdown("<div class='section-tag'>01 — Search</div>", unsafe_allow_html=True)
 st.header("Reference Queries")
 
@@ -413,15 +533,13 @@ if find_btn:
                 max_tokens=512,
                 messages=[{"role": "user", "content": prompt}],
             )
-        raw = response.content[0].text.strip()
+        raw   = response.content[0].text.strip()
         lines = [l.strip() for l in raw.splitlines() if l.strip()]
-
         has_preview_keys = bool(get_secret("UNSPLASH_ACCESS_KEY") or get_secret("PEXELS_API_KEY"))
 
         for i, line in enumerate(lines, 1):
             query_text = line.lstrip("0123456789. ").strip('"')
             enc = urllib.parse.quote_plus(query_text)
-
             pinterest_url = f"https://www.pinterest.com/search/pins/?q={enc}"
             behance_url   = f"https://www.behance.net/search/projects?search={enc}"
             google_url    = f"https://www.google.com/search?tbm=isch&q={enc}"
@@ -435,19 +553,23 @@ if find_btn:
                     previews += search_pexels(query_text, n=3 - len(previews))
 
             if previews:
-                strip_html = '<div class="preview-strip">' + "".join(
+                strip_imgs = "".join(
                     f'<a href="{p["link"]}" target="_blank" rel="noopener">'
                     f'<img src="{p["thumb"]}" alt="{p["author"]}"></a>'
                     for p in previews[:3]
-                ) + "</div>"
+                )
+                strip_pal_cols = ""
+                for p in previews[:3]:
+                    pal = get_color_palette(p["thumb"])
+                    swatches = "".join(f'<div class="swatch" style="background:{c};width:100%;height:8px;border-radius:2px;border:none;box-shadow:none;"></div>' for c in pal) if pal else ""
+                    strip_pal_cols += f'<div class="strip-palette">{swatches}</div>'
+                strip_html = f'<div class="preview-strip">{strip_imgs}</div><div class="strip-palettes">{strip_pal_cols}</div>'
             elif has_preview_keys:
-                strip_html = '<div class="preview-strip">' + ''.join(
-                    '<div class="preview-placeholder"></div>' for _ in range(3)
-                ) + "</div>"
+                strip_html = '<div class="preview-strip">' + ''.join('<div class="preview-placeholder"></div>' for _ in range(3)) + "</div>"
             else:
                 strip_html = ""
 
-            card_html = f"""
+            st.markdown(f"""
             <div class="query-card">
                 <div class="query-card-inner">
                     <div class="card-label">Query {i}</div>
@@ -461,18 +583,17 @@ if find_btn:
                         <a class="ref-btn btn-arena"     href="{arena_url}"     target="_blank" rel="noopener">Are.na</a>
                     </div>
                 </div>
-            </div>"""
-            st.markdown(card_html, unsafe_allow_html=True)
+            </div>""", unsafe_allow_html=True)
 
         if not has_preview_keys:
-            st.info("Add **UNSPLASH_ACCESS_KEY** or **PEXELS_API_KEY** to your secrets to see image previews.")
-        st.success(f"{len(lines)} queries generated — click any image or platform button to explore.")
+            st.info("Add **UNSPLASH_ACCESS_KEY** or **PEXELS_API_KEY** to see image previews.")
+        st.success(f"{len(lines)} queries generated.")
 else:
     st.info("Fill in the brief and click **Find References** to generate search queries.")
 
 st.divider()
 
-# ── Section 2: Filter & Browse ─────────────────────────────────────────────────
+# ── Section 02: Filter & Browse ────────────────────────────────────────────────
 st.markdown("<div class='section-tag'>02 — Filter</div>", unsafe_allow_html=True)
 st.header("Filter & Browse")
 st.markdown(
@@ -483,30 +604,19 @@ st.markdown(
 
 fc1, fc2 = st.columns(2)
 with fc1:
-    filter_spaces = st.pills(
-        "Space type",
-        ["Living Room", "Bedroom", "Kitchen", "Office", "Courtyard",
-         "Rooftop", "Restaurant", "Hotel Lobby", "Retail"],
-        selection_mode="multi", key="filter_spaces",
-    )
-    filter_styles = st.pills(
-        "Style",
-        ["Dreamy", "Dark Moody", "Minimal", "Maximalist", "Rustic",
-         "Industrial", "Scandinavian", "Japanese", "Mediterranean"],
-        selection_mode="multi", key="filter_styles",
-    )
+    filter_spaces = st.pills("Space type",
+        ["Living Room","Bedroom","Kitchen","Office","Courtyard","Rooftop","Restaurant","Hotel Lobby","Retail"],
+        selection_mode="multi", key="filter_spaces")
+    filter_styles = st.pills("Style",
+        ["Dreamy","Dark Moody","Minimal","Maximalist","Rustic","Industrial","Scandinavian","Japanese","Mediterranean"],
+        selection_mode="multi", key="filter_styles")
 with fc2:
-    filter_moods = st.pills(
-        "Mood",
-        ["Warm & Earthy", "Cool & Fresh", "Dramatic", "Serene",
-         "Editorial", "Cozy", "Luxurious", "Raw & Textured"],
-        selection_mode="multi", key="filter_moods",
-    )
-    filter_light = st.pills(
-        "Lighting",
-        ["Natural Light", "Golden Hour", "Moody Low Light", "Overcast", "Artificial"],
-        selection_mode="multi", key="filter_light",
-    )
+    filter_moods = st.pills("Mood",
+        ["Warm & Earthy","Cool & Fresh","Dramatic","Serene","Editorial","Cozy","Luxurious","Raw & Textured"],
+        selection_mode="multi", key="filter_moods")
+    filter_light = st.pills("Lighting",
+        ["Natural Light","Golden Hour","Moody Low Light","Overcast","Artificial"],
+        selection_mode="multi", key="filter_light")
 
 filter_btn = st.button("Browse Filtered Images", type="primary", key="filter_browse")
 
@@ -514,74 +624,57 @@ if filter_btn:
     all_tags = (list(filter_spaces or []) + list(filter_styles or []) +
                 list(filter_moods or []) + list(filter_light or []))
     if not all_tags:
-        st.warning("Select at least one filter tag to browse images.")
+        st.warning("Select at least one filter tag.")
     elif not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
-        st.warning("Add **UNSPLASH_ACCESS_KEY** and/or **PEXELS_API_KEY** to your secrets to see images.")
+        st.warning("Add **UNSPLASH_ACCESS_KEY** and/or **PEXELS_API_KEY** to your secrets.")
     else:
         filter_query = " ".join(all_tags) + " interior architecture"
         with st.spinner("Fetching images..."):
             images = search_unsplash(filter_query, n=9) + search_pexels(filter_query, n=9)
         if not images:
-            st.info("No images found — try different filter tags.")
+            st.info("No images found — try different tags.")
         else:
             cols = st.columns(3)
             for i, img in enumerate(images):
-                badge_class = "badge-unsplash" if img["source"] == "unsplash" else "badge-pexels"
-                badge_label = "Unsplash" if img["source"] == "unsplash" else "Pexels"
                 with cols[i % 3]:
-                    st.image(img["thumb"], use_container_width=True)
-                    st.markdown(
-                        f'<span class="badge {badge_class}">{badge_label}</span> '
-                        f'<a href="{img["link"]}" target="_blank" '
-                        f'style="font-size:0.78rem;color:#5A5A6E;text-decoration:none;">'
-                        f'{img["author"]}</a>',
-                        unsafe_allow_html=True,
-                    )
+                    st.markdown(image_card_html(img["thumb"], img["link"], img["author"], img["source"]),
+                                unsafe_allow_html=True)
             st.success(f"Showing {len(images)} images for: {', '.join(all_tags)}")
 else:
     st.info("Select filter tags above and click **Browse Filtered Images**.")
 
 st.divider()
 
-# ── Section 3: Browse Images ───────────────────────────────────────────────────
+# ── Section 03: Browse Images ──────────────────────────────────────────────────
 st.markdown("<div class='section-tag'>03 — Browse</div>", unsafe_allow_html=True)
 st.header("Browse Reference Images")
 
 if browse_btn:
     if not space or not mood:
         st.warning("Please fill in **Space** and **Mood** before browsing.")
+    elif not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
+        st.warning("Add **UNSPLASH_ACCESS_KEY** and/or **PEXELS_API_KEY** to your secrets.")
     else:
         query = f"{style} {space} {mood} interior architecture"
-        if not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
-            st.warning("Add **UNSPLASH_ACCESS_KEY** and/or **PEXELS_API_KEY** to your Streamlit secrets.")
+        with st.spinner("Fetching images..."):
+            images = search_unsplash(query, n=9) + search_pexels(query, n=9)
+        if not images:
+            st.info("No images found — try adjusting the brief.")
         else:
-            with st.spinner("Fetching images..."):
-                images = search_unsplash(query, n=9) + search_pexels(query, n=9)
-            if not images:
-                st.info("No images found — try adjusting the brief.")
-            else:
-                cols = st.columns(3)
-                for i, img in enumerate(images):
-                    badge_class = "badge-unsplash" if img["source"] == "unsplash" else "badge-pexels"
-                    badge_label = "Unsplash" if img["source"] == "unsplash" else "Pexels"
-                    with cols[i % 3]:
-                        st.image(img["thumb"], use_container_width=True)
-                        st.markdown(
-                            f'<span class="badge {badge_class}">{badge_label}</span> '
-                            f'<a href="{img["link"]}" target="_blank" '
-                            f'style="font-size:0.78rem;color:#5A5A6E;text-decoration:none;">'
-                            f'{img["author"]}</a>',
-                            unsafe_allow_html=True,
-                        )
-                st.success(f"Showing {len(images)} images for '{query}'")
+            cols = st.columns(3)
+            for i, img in enumerate(images):
+                with cols[i % 3]:
+                    st.markdown(image_card_html(img["thumb"], img["link"], img["author"], img["source"]),
+                                unsafe_allow_html=True)
+            st.success(f"Showing {len(images)} images for '{query}'")
 else:
-    st.info("Click **Browse Images** in the sidebar to pull real photos from Unsplash & Pexels.")
+    st.info("Click **Browse Images** in the sidebar to pull real photos.")
 
 st.divider()
 
-# ── Section 4: Score URLs ──────────────────────────────────────────────────────
+# ── Section 04: Score URLs ──────────────────────────────────────────────────────
 st.markdown("<div class='section-tag'>04 — Score</div>", unsafe_allow_html=True)
-st.header("Filter Images")
+st.header("Score Image URLs")
 st.markdown(
     "<p style='color:#5A5A6E;font-size:0.88rem;margin-top:-0.5rem;'>"
     "Paste image URLs (one per line) — Claude will score each for render-readiness.</p>",
@@ -589,8 +682,7 @@ st.markdown(
 )
 
 url_input = st.text_area(
-    "Image URLs",
-    height=160,
+    "Image URLs", height=160,
     placeholder="https://i.pinimg.com/...\nhttps://images.unsplash.com/...",
     label_visibility="collapsed",
 )
