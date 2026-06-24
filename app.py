@@ -1,7 +1,7 @@
 import streamlit as st
 import anthropic
 import urllib.parse
-import os, csv, io, re, requests
+import os, csv, io, re, requests, base64
 from PIL import Image
 from colorthief import ColorThief
 from dotenv import load_dotenv
@@ -47,19 +47,33 @@ TEMPLATES = {
 STOP_WORDS = {"a","an","the","and","or","for","with","in","on","at","to","of","from","by","as","is","are","that","this","be","was","were","it","its","interior","design","photography","photo","image","render","photoshop","reference","style","space","mood","background","high","end","modern","contemporary","architectural","architecture"}
 
 def get_secret(k):
-    return st.secrets.get(k) or os.getenv(k)
+    try:
+        return st.secrets.get(k) or os.getenv(k)
+    except Exception:
+        return os.getenv(k)
 
 client = anthropic.Anthropic(api_key=get_secret("ANTHROPIC_API_KEY"))
 
 # ── Navigation (session state only — never HTML links) ─────────────────────────
+# Apply any pending nav override BEFORE the segmented_control widget renders
+if "_nav_override" in st.session_state:
+    st.session_state.main_nav = st.session_state.pop("_nav_override")
+
 # Sync page ↔ main_nav (segmented control uses main_nav key)
 if "main_nav" in st.session_state and st.session_state.main_nav:
     st.session_state.page = NAV_TO_PAGE.get(st.session_state.main_nav, st.session_state.page)
 page = st.session_state.page
 
 def go_to(p):
+    # Snapshot brief values now (before rerun can reset widget-tied keys)
+    st.session_state._brief_snapshot = {
+        "space": st.session_state.get("brief_space", ""),
+        "style": st.session_state.get("brief_style", "Dreamy"),
+        "mood": st.session_state.get("brief_mood", ""),
+        "background": st.session_state.get("brief_background", "White/Isolated"),
+    }
     st.session_state.page = p
-    st.session_state.main_nav = PAGE_TO_NAV.get(p, "Home")
+    st.session_state._nav_override = PAGE_TO_NAV.get(p, "Home")
     st.rerun()
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -116,6 +130,89 @@ def extract_keywords(texts):
     words = [w for t in texts for w in re.findall(r'\b[a-zA-Z]{4,}\b', t.lower())]
     return [w for w, _ in Counter(w for w in words if w not in STOP_WORDS).most_common(14)]
 
+def extract_brief_from_file(file_bytes, mime_type):
+    """Use Claude Vision to extract brief info from an uploaded PDF/image."""
+    b64 = base64.standard_b64encode(file_bytes).decode()
+    prompt = (
+        "You are analysing a design assignment brief or mood-board image. "
+        "Extract the following and return ONLY a JSON object with these exact keys: "
+        '{"space": "...", "style": "...", "mood": "...", "background": "..."}. '
+        "space = the room/space type (e.g. living room, bedroom, office). "
+        "style = the visual style (choose one: Dreamy, Dark Moody, Minimal, Maximalist, Realistic CGI). "
+        "mood = 3-5 descriptive mood words (e.g. warm, earthy, cozy). "
+        "background = White/Isolated or Scene. "
+        "If unsure, make a reasonable guess. Return ONLY the JSON, no explanation."
+    )
+    try:
+        if mime_type == "application/pdf":
+            content_block = {"type":"document","source":{"type":"base64","media_type":"application/pdf","data":b64}}
+        else:
+            media = mime_type if mime_type in ("image/png","image/jpeg","image/webp","image/gif") else "image/jpeg"
+            content_block = {"type":"image","source":{"type":"base64","media_type":media,"data":b64}}
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001", max_tokens=256,
+            messages=[{"role":"user","content":[
+                content_block,
+                {"type":"text","text":prompt}
+            ]}]
+        )
+        import json
+        text = resp.content[0].text.strip()
+        start = text.find("{"); end = text.rfind("}") + 1
+        return json.loads(text[start:end])
+    except:
+        return None
+
+def extract_palette_from_bytes(file_bytes, n=6):
+    try:
+        ct = ColorThief(io.BytesIO(file_bytes))
+        return [f"#{rv:02x}{g:02x}{b:02x}" for rv, g, b in ct.get_palette(color_count=n, quality=1)]
+    except:
+        return []
+
+def send_board_email(to_email, images):
+    smtp_host = get_secret("SMTP_HOST")
+    smtp_user = get_secret("SMTP_USER")
+    smtp_pass = get_secret("SMTP_PASS")
+    smtp_from = get_secret("SMTP_FROM") or smtp_user
+    if not (smtp_host and smtp_user and smtp_pass):
+        return False, "no_smtp"
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    img_html = "".join(
+        f'<a href="{img["link"]}" style="display:inline-block;margin:6px">'
+        f'<img src="{img["thumb"]}" width="180" height="120" '
+        f'style="object-fit:cover;border-radius:10px;display:block"></a>'
+        for img in images
+    )
+    body = (
+        f"<div style='font-family:sans-serif;max-width:640px;margin:auto'>"
+        f"<h2 style='color:#0D1F8A'>Your Render Finder Board</h2>"
+        f"<p style='color:#3D5299'>{len(images)} reference image(s) curated for you.</p>"
+        f"<div style='display:flex;flex-wrap:wrap;gap:8px;margin-top:16px'>{img_html}</div>"
+        f"<p style='color:#8892C0;font-size:12px;margin-top:24px'>Sent from Render Finder</p>"
+        f"</div>"
+    )
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Your Render Finder Board"
+    msg["From"] = smtp_from
+    msg["To"] = to_email
+    msg.attach(MIMEText(body, "html"))
+    try:
+        port = int(get_secret("SMTP_PORT") or 465)
+        if port == 587:
+            with smtplib.SMTP(smtp_host, port) as s:
+                s.starttls(); s.login(smtp_user, smtp_pass)
+                s.sendmail(smtp_from, [to_email], msg.as_string())
+        else:
+            with smtplib.SMTP_SSL(smtp_host, port) as s:
+                s.login(smtp_user, smtp_pass)
+                s.sendmail(smtp_from, [to_email], msg.as_string())
+        return True, "sent"
+    except Exception as e:
+        return False, str(e)
+
 def on_template_change():
     c = st.session_state.template_selector
     if c != "— Choose a template —" and TEMPLATES.get(c):
@@ -167,80 +264,107 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
 [data-testid="collapsedControl"], footer, #MainMenu { display: none !important; }
 
 /* App background */
-.stApp { background-color: #F2F3F9; min-height: 100vh; }
+.stApp { background-color: #F4F5FA; min-height: 100vh; }
 
-/* Blue blob */
+/* Blue blob — heavily blurred organic shape, grain is a separate element */
 .zn-blob {
-    position: fixed; top: -8%; right: -6%;
-    width: 62vw; height: 115vh;
-    background: radial-gradient(ellipse at 48% 42%,
-        #0A1FCC 0%, #1330CC 12%, #1A3AE0 24%,
-        rgba(22,53,220,0.72) 38%, rgba(18,44,200,0.38) 55%,
-        rgba(15,35,170,0.12) 70%, transparent 82%);
-    border-radius: 58% 42% 52% 48% / 44% 56% 44% 56%;
+    position: fixed; top: -18%; right: -18%;
+    width: 74vw; height: 132vh;
+    background:
+        radial-gradient(ellipse 55% 62% at 58% 22%, #0B1DCC 0%, #1325DD 16%, transparent 62%),
+        radial-gradient(ellipse 62% 78% at 66% 58%, #0E20D8 0%, #0B1DCC 24%, transparent 70%),
+        radial-gradient(ellipse 46% 52% at 72% 82%, #0916B8 0%, transparent 58%),
+        radial-gradient(ellipse 88% 96% at 63% 50%, rgba(10,24,200,0.42) 0%, transparent 72%);
+    border-radius: 42% 58% 50% 50% / 48% 44% 60% 52%;
+    filter: blur(72px);
     pointer-events: none; z-index: 1;
 }
-.zn-blob::after {
-    content: ''; position: absolute; inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    background-size: 250px 250px; opacity: 0.07; mix-blend-mode: overlay;
+.zn-blob::before {
+    content: ''; position: absolute; inset: -5%;
+    background:
+        radial-gradient(ellipse 48% 40% at 30% 16%, rgba(255,255,255,0.24) 0%, transparent 58%),
+        radial-gradient(ellipse 26% 22% at 74% 58%, rgba(255,255,255,0.10) 0%, transparent 52%);
     border-radius: inherit; pointer-events: none;
 }
+/* Grain overlay — separate fixed div so it's NOT blurred with the blob */
+.zn-grain {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 280 280' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.70' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 160px 160px; opacity: 0.30; mix-blend-mode: overlay;
+    pointer-events: none; z-index: 2;
+}
 .zn-bottom-fade {
-    position: fixed; bottom: 0; left: 0; right: 0; height: 38vh;
-    background: linear-gradient(to top, rgba(14,30,160,0.42) 0%, transparent 100%);
+    position: fixed; bottom: 0; right: 0; width: 65vw; height: 28vh;
+    background: radial-gradient(ellipse 80% 100% at 62% 112%, rgba(10,22,200,0.48) 0%, transparent 65%);
+    filter: blur(40px);
     pointer-events: none; z-index: 1;
 }
 
 /* Main container */
 .main .block-container {
-    padding-top: 1.5rem !important; padding-left: 3.5rem !important;
-    padding-right: 3.5rem !important; padding-bottom: 4rem !important;
-    max-width: 100% !important;
+    padding-top: 1.2rem !important; padding-left: 3.8rem !important;
+    padding-right: 3.8rem !important; padding-bottom: 4rem !important;
+    max-width: 100% !important; position: relative; z-index: 10;
 }
 
 /* Logo area */
 .zn-logo-area {
     display: flex; align-items: center; gap: 9px;
-    font-size: 0.82rem; font-weight: 700; letter-spacing: 0.1em;
-    color: #0D1F8A; padding: 0; line-height: 62px;
+    font-size: 0.82rem; font-weight: 700; letter-spacing: 0.12em;
+    color: #0D1F8A; padding: 0; line-height: 56px;
     white-space: nowrap;
 }
 
-/* ── Segmented control → flat nav tabs ── */
-[data-testid="stSegmentedControl"] {
-    background: transparent !important;
+/* Topbar connect button override — always solid navy pill like Zeronode CONNECT */
+[data-testid="column"]:last-child .stButton > button {
+    background: #0D1F8A !important;
+    color: #fff !important;
     border: none !important;
-    padding: 0 !important;
-    gap: 0 !important;
-    box-shadow: none !important;
+    border-radius: 50px !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
+    padding: 0.42rem 1.3rem !important;
+    box-shadow: 0 4px 18px rgba(13,31,138,0.28) !important;
+    white-space: nowrap;
 }
-[data-testid="stSegmentedControl"] > div {
+
+/* ── Segmented control → plain text nav links (Zeronode style) ── */
+[data-testid="stSegmentedControl"],
+[data-testid="stSegmentedControl"] > div,
+[data-testid="stSegmentedControl"] > div > div,
+[data-testid="stSegmentedControl"] [role="group"],
+[data-testid="stSegmentedControl"] [role="radiogroup"] {
     background: transparent !important;
     border: none !important;
-    gap: 0 !important;
     box-shadow: none !important;
+    padding: 0 !important;
+    gap: 0px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
 }
 [data-testid="stSegmentedControl"] button {
+    border-radius: 0 !important;
     background: transparent !important;
     border: none !important;
-    border-radius: 0 !important;
-    color: #8892C0 !important;
-    font-size: 0.73rem !important;
+    color: #5A6BAA !important;
+    font-size: 0.72rem !important;
     font-weight: 500 !important;
-    letter-spacing: 0.08em !important;
+    letter-spacing: 0.12em !important;
     text-transform: uppercase !important;
-    padding: 0 0.95rem !important;
-    height: 60px !important;
-    min-height: 60px !important;
-    border-bottom: 2px solid transparent !important;
+    padding: 0.4rem 1.1rem !important;
+    height: auto !important;
+    min-height: 36px !important;
     box-shadow: none !important;
-    transition: color 0.18s, border-color 0.18s !important;
+    margin: 0 !important;
+    transition: color 0.15s !important;
 }
 [data-testid="stSegmentedControl"] button:hover {
     background: transparent !important;
     color: #0D1F8A !important;
-    border-bottom-color: rgba(13,31,138,0.25) !important;
+    box-shadow: none !important;
 }
 [data-testid="stSegmentedControl"] button[aria-checked="true"],
 [data-testid="stSegmentedControl"] button[data-checked="true"],
@@ -249,8 +373,31 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
     background: transparent !important;
     color: #0D1F8A !important;
     font-weight: 700 !important;
-    border-bottom-color: #0D1F8A !important;
     box-shadow: none !important;
+    border: none !important;
+}
+
+/* ── Floating action pills (frosted glass over blob) ── */
+.fp-container { display: flex; flex-direction: column; gap: 0.65rem; position: relative; z-index: 20; }
+.fp-container .stButton > button {
+    background: rgba(255,255,255,0.13) !important;
+    border: 1px solid rgba(255,255,255,0.38) !important;
+    border-radius: 50px !important;
+    color: rgba(255,255,255,0.96) !important;
+    font-size: 0.88rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.03em !important;
+    text-transform: none !important;
+    padding: 0.78rem 1.55rem !important;
+    box-shadow: 0 4px 28px rgba(0,0,30,0.22), inset 0 1px 0 rgba(255,255,255,0.22) !important;
+    text-align: left !important;
+    width: 100% !important;
+    transition: all 0.2s !important;
+}
+.fp-container .stButton > button:hover {
+    background: rgba(255,255,255,0.22) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 10px 40px rgba(0,0,30,0.28), inset 0 1px 0 rgba(255,255,255,0.30) !important;
 }
 
 /* ── Primary / secondary CTA buttons ── */
@@ -411,6 +558,16 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
              border-left:4px solid rgba(13,31,138,0.3) !important; border-radius:12px !important; }
 .stWarning { background:rgba(255,195,0,0.1) !important; border-radius:12px !important; }
 hr { border-color:rgba(13,31,138,0.09) !important; }
+
+/* ── Stay Connected card ── */
+.sc-title {
+    font-size: 0.67rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #1635CC; font-weight: 700; margin-bottom: 0.35rem; font-family: 'Inter', sans-serif;
+}
+.sc-body {
+    font-size: 0.78rem; color: #3D5299; line-height: 1.5; margin-bottom: 0.85rem;
+    font-family: 'Inter', sans-serif;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -418,6 +575,7 @@ hr { border-color:rgba(13,31,138,0.09) !important; }
 # Background
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown('<div class="zn-blob" aria-hidden="true"></div>'
+            '<div class="zn-grain" aria-hidden="true"></div>'
             '<div class="zn-bottom-fade" aria-hidden="true"></div>',
             unsafe_allow_html=True)
 
@@ -494,17 +652,19 @@ if page == "Brief":
             if st.button("BROWSE IMAGES", key="cta_browse", use_container_width=True):
                 go_to("Browse")
 
-    # Three floating right action pills
+    # Three floating right action pills — frosted glass over blob
     with pills_col:
-        st.markdown("<div style='padding-top:4rem'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='padding-top:3.5rem'></div>", unsafe_allow_html=True)
         fp_items = [
-            ("⊕  Search Refs",   "Search"),
-            ("⊟  Browse Images", "Browse"),
-            ("✦  AI Prompt",     "Prompt"),
+            ("⊕  Find References", "Search"),
+            ("⊟  Browse Images",   "Browse"),
+            ("✦  AI Prompt",       "Prompt"),
         ]
+        st.markdown('<div class="fp-container">', unsafe_allow_html=True)
         for label, p in fp_items:
             if st.button(label, key=f"fp_{p}", use_container_width=True):
                 go_to(p)
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # Bottom glass cards
     st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
@@ -520,6 +680,30 @@ if page == "Brief":
         with ci2:
             st.selectbox("Style", STYLE_OPTIONS, key="brief_style")
         st.text_input("Mood", placeholder="e.g. warm, earthy, editorial", key="brief_mood")
+
+        st.markdown("<div style='margin-top:1rem;margin-bottom:0.3rem'>"
+                    "<span style='font-size:0.68rem;letter-spacing:0.12em;text-transform:uppercase;"
+                    "color:#3D5299;font-weight:600;'>OR UPLOAD ASSIGNMENT BRIEF</span></div>",
+                    unsafe_allow_html=True)
+        brief_file = st.file_uploader("Upload brief (PDF or image)", type=["png","jpg","jpeg","pdf","webp"],
+                                       label_visibility="collapsed", key="brief_upload")
+        if brief_file is not None:
+            if st.button("Extract Brief from File", type="primary", key="extract_brief_btn"):
+                file_bytes = brief_file.read()
+                mime = brief_file.type or "image/jpeg"
+                with st.spinner("Reading brief with Claude AI..."):
+                    extracted = extract_brief_from_file(file_bytes, mime)
+                if extracted:
+                    if extracted.get("space"): st.session_state.brief_space = extracted["space"]
+                    if extracted.get("style") and extracted["style"] in STYLE_OPTIONS:
+                        st.session_state.brief_style = extracted["style"]
+                    if extracted.get("mood"): st.session_state.brief_mood = extracted["mood"]
+                    if extracted.get("background") and extracted["background"] in BG_OPTIONS:
+                        st.session_state.brief_background = extracted["background"]
+                    st.success(f"Brief extracted: {extracted.get('space','')} · {extracted.get('style','')} · {extracted.get('mood','')}")
+                    st.rerun()
+                else:
+                    st.warning("Could not extract brief — try a clearer image or PDF.")
 
     with card_r:
         st.markdown('<div class="zn-card-label">SESSION</div>', unsafe_allow_html=True)
@@ -540,6 +724,27 @@ if page == "Brief":
             if st.button("Open Mood Board →", use_container_width=True):
                 go_to("Board")
 
+        st.markdown('<hr style="border-color:rgba(13,31,138,0.08);margin:1rem 0">', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="sc-title">STAY CONNECTED</div>
+        <div class="sc-body">Forward your curated board references straight to your inbox.</div>
+        """, unsafe_allow_html=True)
+        board_email = st.text_input("Email", placeholder="you@studio.com",
+                                    key="board_email_input", label_visibility="collapsed")
+        if st.button("Send Board →", key="send_board_btn", type="primary", use_container_width=True):
+            if not board_email or "@" not in board_email:
+                st.warning("Enter a valid email address.")
+            elif not st.session_state.selected_images:
+                st.warning("Add images to your Board first.")
+            else:
+                sent, msg = send_board_email(board_email, st.session_state.selected_images)
+                if sent:
+                    st.success(f"Board sent to {board_email}!")
+                elif msg == "no_smtp":
+                    links = "\n".join(img["link"] for img in st.session_state.selected_images)
+                    st.text_area("Copy these links:", links, height=90, key="board_links_out")
+                    st.caption("Add SMTP_HOST / SMTP_USER / SMTP_PASS to secrets for direct email.")
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: Search
 # ══════════════════════════════════════════════════════════════════════════════
@@ -548,11 +753,14 @@ elif page == "Search":
                 '<h2 class="zn-page-title">Reference Queries</h2></div>', unsafe_allow_html=True)
 
     if st.button("Generate Queries", type="primary"):
-        sp = st.session_state.brief_space; mo = st.session_state.brief_mood
+        _snap = st.session_state.get("_brief_snapshot", {})
+        sp = st.session_state.brief_space or _snap.get("space", "")
+        mo = st.session_state.brief_mood or _snap.get("mood", "")
         if not sp or not mo:
             st.warning("Go to **Home** and fill in Space and Mood first.")
         else:
-            sty = st.session_state.brief_style; bg = st.session_state.brief_background
+            sty = st.session_state.brief_style or _snap.get("style", "Dreamy")
+            bg = st.session_state.brief_background or _snap.get("background", "White/Isolated")
             brief = {"space":sp,"style":sty,"mood":mo,"background":bg}
             if not st.session_state.history or st.session_state.history[0] != brief:
                 st.session_state.history.insert(0,brief); st.session_state.history = st.session_state.history[:5]
@@ -678,28 +886,75 @@ elif page == "Browse":
 elif page == "Palette":
     st.markdown('<div class="zn-page-header"><div class="zn-badge-small">● COLOR EXTRACTION</div>'
                 '<h2 class="zn-page-title">Palette Extractor</h2></div>', unsafe_allow_html=True)
-    st.markdown('<div class="zn-card">', unsafe_allow_html=True)
-    palette_url = st.text_input("Image URL", placeholder="https://images.unsplash.com/photo-...")
+
+    pal_tab1, pal_tab2, pal_tab3 = st.tabs(["Upload Image", "From URL", "From Board"])
+
     n_colors = st.slider("Number of colors", 3, 10, 6)
-    if st.button("Extract Palette", type="primary"):
-        if not palette_url.strip():
-            st.warning("Paste an image URL first.")
-        else:
-            with st.spinner("Extracting..."):
-                hexes = extract_palette(palette_url.strip(), n=n_colors)
-            if not hexes:
-                st.warning("Could not extract palette — try a direct image URL (.jpg/.png).")
+
+    def _show_palette(hexes, source_label=""):
+        if not hexes:
+            st.warning("Could not extract palette — try a clearer image.")
+            return
+        if source_label:
+            st.markdown(f"<div style='font-size:0.75rem;color:#3D5299;margin-bottom:0.6rem'>"
+                        f"Source: <strong>{source_label}</strong></div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='swatch-row'>" +
+            "".join(f"<div class='swatch'><div class='swatch-block' style='background:{h}'></div>"
+                     f"<div class='swatch-hex'>{h}</div></div>" for h in hexes) +
+            "</div>", unsafe_allow_html=True)
+        c1, c2, _ = st.columns([1,1,3])
+        with c1:
+            st.download_button("Download CSV", ",".join(hexes).encode(), "palette.csv", "text/csv",
+                               key="dl_pal_csv")
+        with c2:
+            aco = "\n".join(f"{h}" for h in hexes)
+            st.download_button("Download TXT", aco.encode(), "palette.txt", "text/plain",
+                               key="dl_pal_txt")
+        st.success(f"Extracted {len(hexes)} colors.")
+
+    with pal_tab1:
+        pal_file = st.file_uploader("Upload image (JPG, PNG, WEBP)", type=["jpg","jpeg","png","webp"],
+                                     label_visibility="collapsed", key="pal_upload")
+        if pal_file:
+            file_bytes = pal_file.read()
+            col_img, _ = st.columns([2, 3])
+            with col_img:
+                st.image(file_bytes, caption=pal_file.name, use_container_width=True)
+            if st.button("Extract Palette from Upload", type="primary", key="pal_upload_btn"):
+                with st.spinner("Extracting..."):
+                    hexes = extract_palette_from_bytes(file_bytes, n=n_colors)
+                _show_palette(hexes, source_label=pal_file.name)
+
+    with pal_tab2:
+        palette_url = st.text_input("Paste a direct image URL (.jpg / .png)",
+                                     placeholder="https://images.unsplash.com/photo-...",
+                                     key="pal_url_input")
+        if st.button("Extract Palette from URL", type="primary", key="pal_url_btn"):
+            if not palette_url.strip():
+                st.warning("Paste an image URL first.")
             else:
-                st.markdown(
-                    "<div class='swatch-row'>" +
-                    "".join(f"<div class='swatch'><div class='swatch-block' style='background:{h}'></div>"
-                             f"<div class='swatch-hex'>{h}</div></div>" for h in hexes) +
-                    "</div>", unsafe_allow_html=True)
-                dl_col, _ = st.columns([1,3])
-                with dl_col:
-                    st.download_button("Download CSV", ",".join(hexes).encode(), "palette.csv", "text/csv")
-                st.success(f"Extracted {len(hexes)} colors.")
-    st.markdown("</div>", unsafe_allow_html=True)
+                with st.spinner("Downloading & extracting..."):
+                    hexes = extract_palette(palette_url.strip(), n=n_colors)
+                _show_palette(hexes, source_label=palette_url.strip()[:60]+"…")
+
+    with pal_tab3:
+        board_imgs = st.session_state.selected_images
+        if not board_imgs:
+            st.info("Add images to your Board first, then extract palettes from them here.")
+        else:
+            st.markdown(f"<p style='color:#3D5299;font-size:0.82rem'>{len(board_imgs)} image(s) on board</p>",
+                        unsafe_allow_html=True)
+            for i, img in enumerate(board_imgs):
+                c_img, c_btn = st.columns([2, 3])
+                with c_img:
+                    st.image(img["thumb"], use_container_width=True)
+                    st.caption(f"{img['source'].upper()} — {img['author']}")
+                with c_btn:
+                    if st.button(f"Extract from image {i+1}", key=f"pal_board_{i}"):
+                        with st.spinner("Extracting..."):
+                            hexes = extract_palette(img["full"], n=n_colors)
+                        _show_palette(hexes, source_label=f"{img['source']} by {img['author']}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: Board
