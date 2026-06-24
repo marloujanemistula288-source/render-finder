@@ -5,6 +5,7 @@ import os
 import csv
 import io
 import re
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,8 +20,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-api_key = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-client = anthropic.Anthropic(api_key=api_key)
+def get_secret(key):
+    return st.secrets.get(key) or os.getenv(key)
+
+client = anthropic.Anthropic(api_key=get_secret("ANTHROPIC_API_KEY"))
 
 # ── Sidebar: Brief Form ────────────────────────────────────────────────────────
 with st.sidebar:
@@ -32,8 +35,9 @@ with st.sidebar:
     background = st.selectbox("Background", ["White/Isolated", "Scene", "Any"])
 
     find_btn = st.button("Find References", use_container_width=True, type="primary")
+    browse_btn = st.button("Browse Images", use_container_width=True)
 
-# ── Button style injection ─────────────────────────────────────────────────────
+# ── Styles ─────────────────────────────────────────────────────────────────────
 st.markdown(
     """
     <style>
@@ -51,6 +55,19 @@ st.markdown(
     }
     .pinterest-btn:hover { background-color: #ad081b; }
     .pinterest-btn::before { content: "⊞  "; }
+
+    .img-card { position: relative; border-radius: 10px; overflow: hidden; }
+    .badge {
+        display: inline-block;
+        padding: 0.15rem 0.55rem;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .badge-unsplash { background:#111; color:#fff; }
+    .badge-pexels   { background:#05A081; color:#fff; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -94,7 +111,94 @@ else:
 
 st.divider()
 
-# ── Section 2: Filter Images ───────────────────────────────────────────────────
+# ── Section 2: Browse Reference Images ────────────────────────────────────────
+st.header("Browse Reference Images")
+
+def search_unsplash(query, n=9):
+    key = get_secret("UNSPLASH_ACCESS_KEY")
+    if not key:
+        return []
+    resp = requests.get(
+        "https://api.unsplash.com/search/photos",
+        params={"query": query, "per_page": n, "orientation": "landscape"},
+        headers={"Authorization": f"Client-ID {key}"},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        return []
+    return [
+        {
+            "thumb": p["urls"]["small"],
+            "full": p["urls"]["regular"],
+            "link": p["links"]["html"],
+            "author": p["user"]["name"],
+            "source": "unsplash",
+        }
+        for p in resp.json().get("results", [])
+    ]
+
+def search_pexels(query, n=9):
+    key = get_secret("PEXELS_API_KEY")
+    if not key:
+        return []
+    resp = requests.get(
+        "https://api.pexels.com/v1/search",
+        params={"query": query, "per_page": n, "orientation": "landscape"},
+        headers={"Authorization": key},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        return []
+    return [
+        {
+            "thumb": p["src"]["medium"],
+            "full": p["src"]["large"],
+            "link": p["url"],
+            "author": p["photographer"],
+            "source": "pexels",
+        }
+        for p in resp.json().get("photos", [])
+    ]
+
+if browse_btn:
+    if not space or not mood:
+        st.warning("Please fill in **Space** and **Mood** before browsing.")
+    else:
+        query = f"{style} {space} {mood} interior"
+        unsplash_key = get_secret("UNSPLASH_ACCESS_KEY")
+        pexels_key = get_secret("PEXELS_API_KEY")
+
+        if not unsplash_key and not pexels_key:
+            st.warning(
+                "Add **UNSPLASH_ACCESS_KEY** and/or **PEXELS_API_KEY** to your secrets to browse images. "
+                "Get free keys at unsplash.com/developers and pexels.com/api."
+            )
+        else:
+            with st.spinner("Fetching images from Unsplash & Pexels..."):
+                images = search_unsplash(query, n=9) + search_pexels(query, n=9)
+
+            if not images:
+                st.info("No images found — try adjusting the brief.")
+            else:
+                cols = st.columns(3)
+                for i, img in enumerate(images):
+                    badge_class = "badge-unsplash" if img["source"] == "unsplash" else "badge-pexels"
+                    badge_label = "Unsplash" if img["source"] == "unsplash" else "Pexels"
+                    with cols[i % 3]:
+                        st.image(img["thumb"], use_container_width=True)
+                        st.markdown(
+                            f'<span class="badge {badge_class}">{badge_label}</span> '
+                            f'<a href="{img["link"]}" target="_blank" style="font-size:0.8rem;">'
+                            f'{img["author"]}</a>',
+                            unsafe_allow_html=True,
+                        )
+                st.success(f"Showing {len(images)} images for "{query}"")
+else:
+    st.info("Click **Browse Images** in the sidebar to pull real photos from Unsplash & Pexels.")
+
+st.divider()
+
+# ── Section 3: Filter Images ───────────────────────────────────────────────────
 st.header("Filter Images")
 st.markdown("Paste image URLs below (one per line) to check how render-ready they are.")
 
@@ -129,7 +233,6 @@ if check_btn:
         # ── Parse table → CSV download ─────────────────────────────────────
         rows = []
         for line in result.splitlines():
-            # Match pipe-delimited table rows that aren't the separator line
             if "|" in line and not re.match(r"^[\s|:-]+$", line):
                 cells = [c.strip() for c in line.strip().strip("|").split("|")]
                 if cells and cells[0].lower() not in ("url", ""):
