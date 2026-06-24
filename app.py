@@ -266,16 +266,12 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
 /* App background */
 .stApp { background-color: #F4F5FA; min-height: 100vh; }
 
-/* Clip container — fixed, starts just below the nav row so blur never bleeds into the topbar */
-.zn-blob-clip {
-    position: fixed; top: 185px; left: 0; right: 0; bottom: 0;
-    overflow: hidden;
-    pointer-events: none; z-index: 1;
-}
-/* Blue blob — absolute within the clip; top:0 = blob starts at the clip boundary */
+/* Blue blob — narrowed so its left edge clears the nav items (~x>56% of vp).
+   The native header (z=10, white bg) covers the topbar row. Only the far-right
+   column (BRIEF button) sits on the blue, matching the reference CONNECT style. */
 .zn-blob {
-    position: absolute; top: 0; right: -10%;
-    width: 66vw; height: 118vh;
+    position: fixed; top: -12%; right: -10%;
+    width: 54vw; height: 120vh;
     background:
         radial-gradient(ellipse 55% 62% at 60% 18%, #0B1DCC 0%, #1325DD 16%, transparent 60%),
         radial-gradient(ellipse 62% 78% at 66% 54%, #0E20D8 0%, #0B1DCC 24%, transparent 70%),
@@ -283,7 +279,7 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
         radial-gradient(ellipse 88% 96% at 64% 46%, rgba(10,24,200,0.42) 0%, transparent 72%);
     border-radius: 42% 58% 50% 50% / 48% 44% 60% 52%;
     filter: blur(72px);
-    pointer-events: none;
+    pointer-events: none; z-index: 1;
 }
 .zn-blob::before {
     content: ''; position: absolute; inset: -5%;
@@ -450,6 +446,31 @@ button[data-testid="stBaseButton-segmented_controlActive"] {
     box-shadow: 0 12px 44px rgba(0,0,40,0.32), inset 0 1px 0 rgba(255,255,255,0.45) !important;
 }
 
+/* ── External link pills (Pinterest / Arch Daily / Dezeen) ── */
+.fp-container {
+    display: flex; flex-direction: column; gap: 0.65rem;
+}
+.fp-pill {
+    display: block; text-align: center;
+    background: rgba(255,255,255,0.12);
+    backdrop-filter: blur(18px) brightness(0.40) saturate(0.75);
+    -webkit-backdrop-filter: blur(18px) brightness(0.40) saturate(0.75);
+    border: 1.5px solid rgba(255,255,255,0.50);
+    border-radius: 50px;
+    color: #FFFFFF !important;
+    font-family: inherit; font-size: 0.92rem; font-weight: 500;
+    letter-spacing: 0.04em; text-decoration: none;
+    padding: 0.85rem 1.6rem;
+    box-shadow: 0 4px 32px rgba(0,0,40,0.28), inset 0 1px 0 rgba(255,255,255,0.25);
+    transition: all 0.2s; cursor: pointer;
+}
+.fp-pill:hover {
+    background: rgba(255,255,255,0.22);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 44px rgba(0,0,40,0.32), inset 0 1px 0 rgba(255,255,255,0.45);
+    color: #FFFFFF !important; text-decoration: none;
+}
+
 /* ── Inputs ── */
 input, textarea, [data-testid="stTextInput"] input {
     background: rgba(255,255,255,0.88) !important;
@@ -594,7 +615,7 @@ hr { border-color:rgba(13,31,138,0.09) !important; }
 # ══════════════════════════════════════════════════════════════════════════════
 # Background
 # ══════════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="zn-blob-clip"><div class="zn-blob" aria-hidden="true"></div></div>'
+st.markdown('<div class="zn-blob" aria-hidden="true"></div>'
             '<div class="zn-grain" aria-hidden="true"></div>'
             '<div class="zn-bottom-fade" aria-hidden="true"></div>',
             unsafe_allow_html=True)
@@ -675,16 +696,19 @@ if page == "Brief":
     # Three floating right action pills — frosted glass over blob
     with pills_col:
         st.markdown("<div style='padding-top:3.5rem'></div>", unsafe_allow_html=True)
-        fp_items = [
-            ("⊕  Find References", "Search"),
-            ("⊟  Browse Images",   "Browse"),
-            ("✦  AI Prompt",       "Prompt"),
-        ]
-        st.markdown('<div class="fp-container">', unsafe_allow_html=True)
-        for label, p in fp_items:
-            if st.button(label, key=f"fp_{p}", use_container_width=True):
-                go_to(p)
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('''
+<div class="fp-container">
+  <a href="https://pinterest.com" target="_blank" rel="noopener noreferrer" class="fp-pill">
+    ⊕&nbsp;&nbsp;Pinterest
+  </a>
+  <a href="https://www.archdaily.com" target="_blank" rel="noopener noreferrer" class="fp-pill">
+    ⊙&nbsp;&nbsp;Arch Daily
+  </a>
+  <a href="https://www.dezeen.com" target="_blank" rel="noopener noreferrer" class="fp-pill">
+    ◈&nbsp;&nbsp;Dezeen
+  </a>
+</div>
+''', unsafe_allow_html=True)
 
     # Bottom glass cards
     st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
