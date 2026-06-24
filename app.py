@@ -192,7 +192,7 @@ if browse_btn:
                             f'{img["author"]}</a>',
                             unsafe_allow_html=True,
                         )
-                st.success(f"Showing {len(images)} images for "{query}"")
+                st.success(f"Showing {len(images)} images for '{query}'")
 else:
     st.info("Click **Browse Images** in the sidebar to pull real photos from Unsplash & Pexels.")
 
