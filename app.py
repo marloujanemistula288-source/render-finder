@@ -17,7 +17,6 @@ def get_secret(key):
 
 client = anthropic.Anthropic(api_key=get_secret("ANTHROPIC_API_KEY"))
 
-# ── Image search helpers ───────────────────────────────────────────────────────
 def search_unsplash(query, n=9):
     key = get_secret("UNSPLASH_ACCESS_KEY")
     if not key:
@@ -56,49 +55,24 @@ def search_pexels(query, n=9):
 
 NOISE = "data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"
 
-# ── Zeronode-style: full-page gradient blob + frosted glass panels ─────────────
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
 
-/* ── Full-page background gradient (the blob IS the page) ── */
 html, body, [class*="css"] {{
     font-family: 'Space Grotesk', sans-serif;
 }}
+
+/* ── Page base ── */
 .stApp {{
-    background:
-        radial-gradient(ellipse at 88% 72%, #1533E8 0%, rgba(21,51,232,0.72) 18%, rgba(21,51,232,0.18) 44%, transparent 62%),
-        radial-gradient(ellipse at 96% 28%, rgba(21,51,232,0.36) 0%, transparent 42%),
-        radial-gradient(ellipse at 60% 95%, rgba(21,51,232,0.22) 0%, transparent 38%),
-        #EAEAED;
-    background-attachment: fixed;
-    min-height: 100vh;
+    background-color: #EAEAED;
 }}
 
-/* Grain texture overlay on entire page */
-.stApp::before {{
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image: url("{NOISE}");
-    opacity: 0.07;
-    pointer-events: none;
-    z-index: 0;
-}}
-
-/* Make Streamlit containers transparent so gradient shows through */
-.block-container,
-[data-testid="stMainBlockContainer"],
-[data-testid="stVerticalBlock"] > div {{
-    background: transparent !important;
-}}
-
-/* ── Sidebar: frosted glass panel ── */
+/* ── LEFT PANEL: clean white sidebar ── */
 [data-testid="stSidebar"] {{
-    background: rgba(234,234,240,0.72) !important;
-    backdrop-filter: blur(24px) !important;
-    -webkit-backdrop-filter: blur(24px) !important;
-    border-right: 1px solid rgba(255,255,255,0.55) !important;
+    background: #F4F4F7 !important;
+    border-right: 1px solid rgba(200,200,215,0.55) !important;
+    backdrop-filter: none !important;
 }}
 [data-testid="stSidebar"] h1,
 [data-testid="stSidebar"] h2,
@@ -107,10 +81,41 @@ html, body, [class*="css"] {{
 [data-testid="stSidebar"] p {{ color: #0C0C12 !important; }}
 [data-testid="stSidebarNav"] {{ display: none; }}
 
+/* ── RIGHT AREA: gradient blob on main content ── */
+[data-testid="stMain"],
+section.main {{
+    background:
+        radial-gradient(ellipse at 80% 64%, #1533E8 0%, rgba(21,51,232,0.72) 19%, rgba(21,51,232,0.14) 46%, transparent 63%),
+        radial-gradient(ellipse at 95% 18%, rgba(21,51,232,0.28) 0%, transparent 40%),
+        radial-gradient(ellipse at 55% 92%, rgba(21,51,232,0.18) 0%, transparent 36%),
+        #EAEAED !important;
+    background-attachment: fixed !important;
+}}
+
+/* Grain texture over main area */
+[data-testid="stMain"]::before,
+section.main::before {{
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: url("{NOISE}");
+    opacity: 0.07;
+    pointer-events: none;
+    z-index: 0;
+}}
+
+/* Transparent block containers so gradient shows */
+.block-container,
+[data-testid="stMainBlockContainer"] {{
+    background: transparent !important;
+    position: relative;
+    z-index: 1;
+}}
+
 /* ── Headers ── */
 h1 {{
     font-family: 'Space Grotesk', sans-serif !important;
-    font-size: 2rem !important;
+    font-size: 1.9rem !important;
     color: #0C0C12 !important;
     letter-spacing: -0.03em;
     font-weight: 600 !important;
@@ -125,42 +130,40 @@ h2, h3 {{
 
 /* ── Hero section ── */
 .hero-section {{
-    padding: 2.8rem 0 2.4rem;
-    max-width: 560px;
+    padding: 2.6rem 0 2rem;
+    max-width: 520px;
 }}
 .hero-tag {{
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
     background: rgba(255,255,255,0.55);
-    border: 1px solid rgba(255,255,255,0.75);
+    border: 1px solid rgba(255,255,255,0.78);
     border-radius: 50px;
-    padding: 0.35rem 1rem;
-    font-size: 0.65rem;
-    font-weight: 600;
-    letter-spacing: 0.14em;
+    padding: 0.32rem 1rem;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
     color: #1533E8;
     font-family: 'Space Mono', monospace;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    margin-bottom: 1.4rem;
+    margin-bottom: 1.3rem;
 }}
 .tag-dot {{
-    width: 6px;
-    height: 6px;
+    width: 6px; height: 6px;
     border-radius: 50%;
     background: #1533E8;
-    display: inline-block;
     flex-shrink: 0;
 }}
 .hero-title {{
-    font-size: 3.2rem;
+    font-size: 3rem;
     font-weight: 600;
     color: #0C0C12;
     letter-spacing: -0.04em;
-    line-height: 1.08;
-    margin-bottom: 1.1rem;
+    line-height: 1.06;
+    margin-bottom: 1rem;
     font-family: 'Space Grotesk', sans-serif;
 }}
 .hero-title em {{
@@ -169,30 +172,19 @@ h2, h3 {{
     color: #1533E8;
 }}
 .hero-body {{
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     color: #5A5A6E;
     line-height: 1.65;
     font-weight: 400;
-    max-width: 420px;
+    max-width: 400px;
 }}
 
-/* ── Frosted glass card (base) ── */
-.glass-card {{
-    background: rgba(255,255,255,0.58);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    border: 1px solid rgba(255,255,255,0.75);
-    border-radius: 18px;
-    padding: 1.4rem 1.5rem;
-    margin-bottom: 1rem;
-}}
-
-/* ── Query card ── */
+/* ── Frosted glass query cards ── */
 .query-card {{
     background: rgba(255,255,255,0.58);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    border: 1px solid rgba(255,255,255,0.75);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.78);
     border-radius: 18px;
     overflow: hidden;
     margin-bottom: 1rem;
@@ -207,7 +199,7 @@ h2, h3 {{
     letter-spacing: 0.2em;
     text-transform: uppercase;
     font-family: 'Space Mono', monospace;
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.35rem;
 }}
 .card-query-text {{
     font-size: 0.95rem;
@@ -234,21 +226,20 @@ h2, h3 {{
 .preview-placeholder {{
     width: calc(33.33% - 0.34rem);
     height: 88px;
-    background: rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.28);
     border-radius: 10px;
     border: 1px solid rgba(255,255,255,0.5);
 }}
 .btn-row {{ display: flex; flex-wrap: wrap; gap: 0.3rem; }}
 
-/* ── Platform ref buttons ── */
+/* ── Platform buttons ── */
 .ref-btn {{
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.38rem 0.95rem;
+    padding: 0.36rem 0.9rem;
     border-radius: 50px;
     text-decoration: none !important;
-    font-size: 0.68rem;
+    font-size: 0.67rem;
     font-weight: 500;
     font-family: 'Space Grotesk', sans-serif;
     letter-spacing: 0.07em;
@@ -257,16 +248,16 @@ h2, h3 {{
     border: 1px solid transparent;
 }}
 .ref-btn:hover {{ opacity: 0.68; }}
-.btn-pinterest {{ background-color: #1533E8; color: #fff !important; }}
-.btn-behance   {{ background-color: #0C0C12; color: #EAEAED !important; }}
-.btn-google    {{ background: rgba(255,255,255,0.75); color: #0C0C12 !important; border: 1px solid rgba(0,0,0,0.12); }}
-.btn-archinect {{ background: rgba(255,255,255,0.45); color: #0C0C12 !important; border: 1px solid rgba(0,0,0,0.1); }}
-.btn-arena     {{ background: rgba(21,51,232,0.1); color: #1533E8 !important; border: 1px solid rgba(21,51,232,0.22); }}
+.btn-pinterest {{ background: #1533E8; color: #fff !important; }}
+.btn-behance   {{ background: #0C0C12; color: #EAEAED !important; }}
+.btn-google    {{ background: rgba(255,255,255,0.72); color: #0C0C12 !important; border: 1px solid rgba(0,0,0,0.1); }}
+.btn-archinect {{ background: rgba(255,255,255,0.42); color: #0C0C12 !important; border: 1px solid rgba(0,0,0,0.08); }}
+.btn-arena     {{ background: rgba(21,51,232,0.1); color: #1533E8 !important; border: 1px solid rgba(21,51,232,0.2); }}
 
 /* ── Inputs ── */
 input[type="text"], textarea {{
-    background-color: rgba(255,255,255,0.75) !important;
-    border: 1px solid rgba(255,255,255,0.85) !important;
+    background-color: rgba(255,255,255,0.88) !important;
+    border: 1px solid rgba(200,200,215,0.7) !important;
     border-radius: 50px !important;
     color: #0C0C12 !important;
     font-family: 'Space Grotesk', sans-serif !important;
@@ -274,48 +265,40 @@ input[type="text"], textarea {{
 textarea {{ border-radius: 14px !important; }}
 input[type="text"]:focus, textarea:focus {{
     border-color: #1533E8 !important;
-    box-shadow: 0 0 0 2px rgba(21,51,232,0.15) !important;
+    box-shadow: 0 0 0 2px rgba(21,51,232,0.12) !important;
 }}
-
-/* ── Select ── */
 [data-testid="stSelectbox"] > div > div {{
-    background-color: rgba(255,255,255,0.75) !important;
-    border: 1px solid rgba(255,255,255,0.85) !important;
+    background-color: rgba(255,255,255,0.88) !important;
+    border: 1px solid rgba(200,200,215,0.7) !important;
     border-radius: 50px !important;
     color: #0C0C12 !important;
 }}
 
-/* ── Primary buttons ── */
+/* ── Streamlit buttons ── */
 .stButton > button[kind="primary"] {{
     background-color: #1533E8 !important;
-    color: #FFFFFF !important;
+    color: #fff !important;
     border: none !important;
     border-radius: 50px !important;
     font-family: 'Space Grotesk', sans-serif !important;
     font-weight: 500 !important;
     letter-spacing: 0.07em;
     text-transform: uppercase;
-    font-size: 0.75rem !important;
-    transition: background-color 0.2s;
+    font-size: 0.74rem !important;
 }}
 .stButton > button[kind="primary"]:hover {{ background-color: #0F25C4 !important; }}
-
-/* ── Secondary buttons ── */
 .stButton > button[kind="secondary"] {{
     background-color: rgba(255,255,255,0.6) !important;
     color: #0C0C12 !important;
-    border: 1px solid rgba(0,0,0,0.15) !important;
+    border: 1px solid rgba(0,0,0,0.14) !important;
     border-radius: 50px !important;
     font-family: 'Space Grotesk', sans-serif !important;
     font-weight: 500 !important;
     letter-spacing: 0.07em;
     text-transform: uppercase;
-    font-size: 0.75rem !important;
-    backdrop-filter: blur(8px);
+    font-size: 0.74rem !important;
 }}
-.stButton > button[kind="secondary"]:hover {{ background-color: rgba(255,255,255,0.85) !important; }}
-
-/* ── Download button ── */
+.stButton > button[kind="secondary"]:hover {{ background-color: rgba(255,255,255,0.88) !important; }}
 .stDownloadButton > button {{
     background-color: #0C0C12 !important;
     color: #EAEAED !important;
@@ -325,28 +308,24 @@ input[type="text"]:focus, textarea:focus {{
     font-weight: 500 !important;
     letter-spacing: 0.07em;
     text-transform: uppercase;
-    font-size: 0.75rem !important;
+    font-size: 0.74rem !important;
 }}
 .stDownloadButton > button:hover {{ background-color: #1533E8 !important; }}
 
-/* ── Alerts: frosted glass ── */
+/* ── Alerts: frosted ── */
 [data-testid="stAlert"] {{
     border-radius: 12px !important;
-    font-family: 'Space Grotesk', sans-serif !important;
     backdrop-filter: blur(12px) !important;
     -webkit-backdrop-filter: blur(12px) !important;
+    font-family: 'Space Grotesk', sans-serif !important;
 }}
-.stSuccess {{ background-color: rgba(230,235,255,0.75) !important; color: #0A1A8A !important; border-left: 3px solid #1533E8 !important; }}
-.stInfo    {{ background-color: rgba(255,255,255,0.55) !important; color: #0C0C12 !important; border-left: 3px solid rgba(100,100,140,0.6) !important; }}
-.stWarning {{ background-color: rgba(255,244,230,0.75) !important; color: #5A3000 !important; border-left: 3px solid #E88015 !important; }}
+.stSuccess {{ background: rgba(230,235,255,0.72) !important; color: #0A1A8A !important; border-left: 3px solid #1533E8 !important; }}
+.stInfo    {{ background: rgba(255,255,255,0.52) !important; color: #0C0C12 !important; border-left: 3px solid rgba(100,100,140,0.5) !important; }}
+.stWarning {{ background: rgba(255,244,230,0.72) !important; color: #5A3000 !important; border-left: 3px solid #E88015 !important; }}
 
-/* ── Divider ── */
-hr {{ border-color: rgba(0,0,0,0.1) !important; }}
-
-/* ── Spinner ── */
+/* ── Misc ── */
+hr {{ border-color: rgba(0,0,0,0.08) !important; }}
 .stSpinner > div {{ border-top-color: #1533E8 !important; }}
-
-/* ── Image badge ── */
 .badge {{
     display: inline-block;
     padding: 0.1rem 0.5rem;
@@ -358,8 +337,6 @@ hr {{ border-color: rgba(0,0,0,0.1) !important; }}
 }}
 .badge-unsplash {{ background: #0C0C12; color: #EAEAED; }}
 .badge-pexels   {{ background: #1533E8; color: #fff; }}
-
-/* ── Section label ── */
 .section-tag {{
     font-size: 0.6rem;
     letter-spacing: 0.2em;
@@ -381,7 +358,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Sidebar ────────────────────────────────────────────────────────────────────
+# ── Sidebar: clean white left panel ───────────────────────────────────────────
 with st.sidebar:
     st.markdown("<div class='section-tag'>Project Brief</div>", unsafe_allow_html=True)
     st.markdown("### Brief")
@@ -513,7 +490,7 @@ st.divider()
 st.markdown("<div class='section-tag'>03 — Filter</div>", unsafe_allow_html=True)
 st.header("Filter Images")
 st.markdown(
-    "<p style='color:#5A5A6E; font-size:0.88rem; margin-top:-0.5rem;'>"
+    "<p style='color:#5A5A6E;font-size:0.88rem;margin-top:-0.5rem;'>"
     "Paste image URLs (one per line) — Claude will score each for render-readiness.</p>",
     unsafe_allow_html=True,
 )
