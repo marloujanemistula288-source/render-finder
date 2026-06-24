@@ -323,6 +323,28 @@ input[type="text"]:focus, textarea:focus {{
 .stInfo    {{ background: rgba(255,255,255,0.52) !important; color: #0C0C12 !important; border-left: 3px solid rgba(100,100,140,0.5) !important; }}
 .stWarning {{ background: rgba(255,244,230,0.72) !important; color: #5A3000 !important; border-left: 3px solid #E88015 !important; }}
 
+/* ── Filter pills (st.pills) ── */
+[data-testid="stPillsInput"] button {{
+    border-radius: 50px !important;
+    font-family: 'Space Grotesk', sans-serif !important;
+    font-size: 0.72rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.05em !important;
+    background: rgba(255,255,255,0.55) !important;
+    border: 1px solid rgba(200,200,215,0.65) !important;
+    color: #0C0C12 !important;
+    transition: all 0.15s !important;
+}}
+[data-testid="stPillsInput"] button[aria-pressed="true"] {{
+    background: #1533E8 !important;
+    border-color: #1533E8 !important;
+    color: #fff !important;
+}}
+[data-testid="stPillsInput"] button:hover {{
+    background: rgba(21,51,232,0.1) !important;
+    border-color: rgba(21,51,232,0.3) !important;
+}}
+
 /* ── Misc ── */
 hr {{ border-color: rgba(0,0,0,0.08) !important; }}
 .stSpinner > div {{ border-top-color: #1533E8 !important; }}
@@ -450,8 +472,79 @@ else:
 
 st.divider()
 
-# ── Section 2: Browse Images ───────────────────────────────────────────────────
-st.markdown("<div class='section-tag'>02 — Browse</div>", unsafe_allow_html=True)
+# ── Section 2: Filter & Browse ─────────────────────────────────────────────────
+st.markdown("<div class='section-tag'>02 — Filter</div>", unsafe_allow_html=True)
+st.header("Filter & Browse")
+st.markdown(
+    "<p style='color:#5A5A6E;font-size:0.88rem;margin-top:-0.5rem;margin-bottom:1.2rem;'>"
+    "Select tags to browse images directly — no prompts needed.</p>",
+    unsafe_allow_html=True,
+)
+
+fc1, fc2 = st.columns(2)
+with fc1:
+    filter_spaces = st.pills(
+        "Space type",
+        ["Living Room", "Bedroom", "Kitchen", "Office", "Courtyard",
+         "Rooftop", "Restaurant", "Hotel Lobby", "Retail"],
+        selection_mode="multi", key="filter_spaces",
+    )
+    filter_styles = st.pills(
+        "Style",
+        ["Dreamy", "Dark Moody", "Minimal", "Maximalist", "Rustic",
+         "Industrial", "Scandinavian", "Japanese", "Mediterranean"],
+        selection_mode="multi", key="filter_styles",
+    )
+with fc2:
+    filter_moods = st.pills(
+        "Mood",
+        ["Warm & Earthy", "Cool & Fresh", "Dramatic", "Serene",
+         "Editorial", "Cozy", "Luxurious", "Raw & Textured"],
+        selection_mode="multi", key="filter_moods",
+    )
+    filter_light = st.pills(
+        "Lighting",
+        ["Natural Light", "Golden Hour", "Moody Low Light", "Overcast", "Artificial"],
+        selection_mode="multi", key="filter_light",
+    )
+
+filter_btn = st.button("Browse Filtered Images", type="primary", key="filter_browse")
+
+if filter_btn:
+    all_tags = (list(filter_spaces or []) + list(filter_styles or []) +
+                list(filter_moods or []) + list(filter_light or []))
+    if not all_tags:
+        st.warning("Select at least one filter tag to browse images.")
+    elif not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
+        st.warning("Add **UNSPLASH_ACCESS_KEY** and/or **PEXELS_API_KEY** to your secrets to see images.")
+    else:
+        filter_query = " ".join(all_tags) + " interior architecture"
+        with st.spinner("Fetching images..."):
+            images = search_unsplash(filter_query, n=9) + search_pexels(filter_query, n=9)
+        if not images:
+            st.info("No images found — try different filter tags.")
+        else:
+            cols = st.columns(3)
+            for i, img in enumerate(images):
+                badge_class = "badge-unsplash" if img["source"] == "unsplash" else "badge-pexels"
+                badge_label = "Unsplash" if img["source"] == "unsplash" else "Pexels"
+                with cols[i % 3]:
+                    st.image(img["thumb"], use_container_width=True)
+                    st.markdown(
+                        f'<span class="badge {badge_class}">{badge_label}</span> '
+                        f'<a href="{img["link"]}" target="_blank" '
+                        f'style="font-size:0.78rem;color:#5A5A6E;text-decoration:none;">'
+                        f'{img["author"]}</a>',
+                        unsafe_allow_html=True,
+                    )
+            st.success(f"Showing {len(images)} images for: {', '.join(all_tags)}")
+else:
+    st.info("Select filter tags above and click **Browse Filtered Images**.")
+
+st.divider()
+
+# ── Section 3: Browse Images ───────────────────────────────────────────────────
+st.markdown("<div class='section-tag'>03 — Browse</div>", unsafe_allow_html=True)
 st.header("Browse Reference Images")
 
 if browse_btn:
@@ -486,8 +579,8 @@ else:
 
 st.divider()
 
-# ── Section 3: Filter Images ───────────────────────────────────────────────────
-st.markdown("<div class='section-tag'>03 — Filter</div>", unsafe_allow_html=True)
+# ── Section 4: Score URLs ──────────────────────────────────────────────────────
+st.markdown("<div class='section-tag'>04 — Score</div>", unsafe_allow_html=True)
 st.header("Filter Images")
 st.markdown(
     "<p style='color:#5A5A6E;font-size:0.88rem;margin-top:-0.5rem;'>"
