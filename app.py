@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import anthropic
 import urllib.parse
 import os, csv, io, re, requests
@@ -177,7 +176,8 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
 .zn-blob::after {
     content: ''; position: absolute; inset: 0;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    background-size: 250px 250px; opacity: 0.07; mix-blend-mode: overlay; border-radius: inherit;
+    background-size: 250px 250px; opacity: 0.07; mix-blend-mode: overlay;
+    border-radius: inherit; pointer-events: none;
 }
 .zn-bottom-fade {
     position: fixed; bottom: 0; left: 0; right: 0; height: 38vh;
@@ -185,20 +185,21 @@ header[data-testid="stHeader"], [data-testid="stSidebar"],
     pointer-events: none; z-index: 1;
 }
 
-/* Topbar — JS adds .zn-topnav to the first stHorizontalBlock */
-.zn-topnav {
-    position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important;
-    z-index: 600 !important; min-height: 62px !important;
-    background: rgba(242,243,249,0.92) !important;
-    backdrop-filter: blur(18px) !important; -webkit-backdrop-filter: blur(18px) !important;
-    border-bottom: 1px solid rgba(22,53,204,0.07) !important;
-    padding: 0 2rem !important; margin: 0 !important;
-    align-items: center !important;
+/* Topbar row — styled via CSS, scrolls with page (no JS needed) */
+.zn-topbar-wrap {
+    background: rgba(242,243,249,0.94);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    border-bottom: 1px solid rgba(22,53,204,0.07);
+    margin: -1.5rem -3.5rem 1.5rem -3.5rem;
+    padding: 0 3.5rem;
+    min-height: 62px;
+    display: flex; align-items: center;
+    position: relative; z-index: 100;
 }
 
-/* Main container — leaves room for fixed topbar */
+/* Main container */
 .main .block-container {
-    padding-top: 78px !important; padding-left: 3.5rem !important;
+    padding-top: 1.5rem !important; padding-left: 3.5rem !important;
     padding-right: 3.5rem !important; padding-bottom: 4rem !important;
     max-width: 100% !important; position: relative; z-index: 10;
 }
@@ -445,6 +446,7 @@ st.markdown('<div class="zn-blob" aria-hidden="true"></div>'
 # Topbar  — Streamlit buttons styled as nav links via the marker-div trick
 # JS makes the first stHorizontalBlock fixed via .zn-topnav class
 # ══════════════════════════════════════════════════════════════════════════════
+st.markdown('<div class="zn-topbar-wrap">', unsafe_allow_html=True)
 c_logo, c1, c2, c3, c4, c5, c6, c_conn = st.columns([2, 0.9, 0.9, 0.95, 0.95, 0.85, 0.85, 1.7])
 
 with c_logo:
@@ -481,30 +483,7 @@ with c_conn:
     if st.button(f"{brief_lbl} ●", key="nav_connect", use_container_width=True):
         go_to("Brief")
 
-# JS: fix the first stHorizontalBlock as topbar + re-attach after React rerenders
-components.html("""
-<script>
-(function() {
-    function tag() {
-        try {
-            var doc = window.parent.document;
-            var first = doc.querySelector('[data-testid="stHorizontalBlock"]');
-            if (first && !first.classList.contains('zn-topnav')) {
-                first.classList.add('zn-topnav');
-            }
-        } catch(e) {}
-    }
-    tag();
-    // Re-attach after React reconciles the DOM
-    try {
-        var obs = new MutationObserver(tag);
-        obs.observe(window.parent.document.body, {childList: true, subtree: true});
-    } catch(e) {
-        setInterval(tag, 300);
-    }
-})();
-</script>
-""", height=0, scrolling=False)
+st.markdown('</div>', unsafe_allow_html=True)  # close zn-topbar-wrap
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: Brief  (Zeronode hero layout)
