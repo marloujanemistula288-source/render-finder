@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import anthropic
 import urllib.parse
 import os, csv, io, re, requests
@@ -18,6 +19,7 @@ _defaults = {
     "brief_space": "", "brief_style": "Dreamy",
     "brief_mood": "", "brief_background": "White/Isolated",
     "template_selector": "— Choose a template —",
+    "page": "Brief",
 }
 for k, v in _defaults.items():
     if k not in st.session_state:
@@ -47,13 +49,12 @@ def get_secret(k):
 
 client = anthropic.Anthropic(api_key=get_secret("ANTHROPIC_API_KEY"))
 
-# ── Navigation via query params ────────────────────────────────────────────────
-page = st.query_params.get("page", "Brief")
-if page not in PAGES:
-    page = "Brief"
+# ── Navigation (session state only — never HTML links) ─────────────────────────
+page = st.session_state.page
 
 def go_to(p):
-    st.query_params["page"] = p
+    st.session_state.page = p
+    st.rerun()
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def search_unsplash(query, n=9):
@@ -148,233 +149,175 @@ def render_image_grid(images, key_prefix="img"):
                     st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# CSS — exact Zeronode layout
+# CSS
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300;1,400&display=swap');
-
 *, *::before, *::after { box-sizing: border-box; }
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
-/* ── Strip Streamlit chrome ── */
-header[data-testid="stHeader"]  { display: none !important; }
-[data-testid="stSidebar"]       { display: none !important; }
-[data-testid="collapsedControl"]{ display: none !important; }
-footer                          { display: none !important; }
-#MainMenu                       { display: none !important; }
+header[data-testid="stHeader"], [data-testid="stSidebar"],
+[data-testid="collapsedControl"], footer, #MainMenu { display: none !important; }
 
-/* ── App background ── */
-.stApp {
-    background-color: #F2F3F9;
-    min-height: 100vh;
-}
+/* App background */
+.stApp { background-color: #F2F3F9; min-height: 100vh; }
 
-/* ── Main content area ── */
-.main .block-container {
-    max-width: 100% !important;
-    padding-top: 80px !important;
-    padding-left: 4rem !important;
-    padding-right: 4rem !important;
-    padding-bottom: 4rem !important;
-    position: relative;
-    z-index: 10;
-}
-
-/* ── Blue blob (fixed background) ── */
+/* Blue blob */
 .zn-blob {
-    position: fixed;
-    top: -8%;
-    right: -6%;
-    width: 62vw;
-    height: 115vh;
-    background: radial-gradient(
-        ellipse at 48% 42%,
-        #0A1FCC 0%,
-        #1330CC 12%,
-        #1A3AE0 24%,
-        rgba(22,53,220,0.72) 38%,
-        rgba(18,44,200,0.38) 55%,
-        rgba(15,35,170,0.12) 70%,
-        transparent 82%
-    );
+    position: fixed; top: -8%; right: -6%;
+    width: 62vw; height: 115vh;
+    background: radial-gradient(ellipse at 48% 42%,
+        #0A1FCC 0%, #1330CC 12%, #1A3AE0 24%,
+        rgba(22,53,220,0.72) 38%, rgba(18,44,200,0.38) 55%,
+        rgba(15,35,170,0.12) 70%, transparent 82%);
     border-radius: 58% 42% 52% 48% / 44% 56% 44% 56%;
-    pointer-events: none;
-    z-index: 1;
+    pointer-events: none; z-index: 1;
 }
-/* grain overlay */
 .zn-blob::after {
-    content: '';
-    position: absolute; inset: 0;
+    content: ''; position: absolute; inset: 0;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    background-size: 250px 250px;
-    opacity: 0.07;
-    mix-blend-mode: overlay;
-    border-radius: inherit;
+    background-size: 250px 250px; opacity: 0.07; mix-blend-mode: overlay; border-radius: inherit;
 }
-
-/* ── Bottom blue fade ── */
 .zn-bottom-fade {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    height: 38vh;
+    position: fixed; bottom: 0; left: 0; right: 0; height: 38vh;
     background: linear-gradient(to top, rgba(14,30,160,0.42) 0%, transparent 100%);
-    pointer-events: none;
-    z-index: 1;
+    pointer-events: none; z-index: 1;
 }
 
-/* ── Fixed top navigation bar ── */
-.zn-topbar {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    height: 62px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 3.5rem;
-    background: rgba(242,243,249,0.88);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    border-bottom: 1px solid rgba(22,53,204,0.07);
-    z-index: 500;
+/* Topbar — JS adds .zn-topnav to the first stHorizontalBlock */
+.zn-topnav {
+    position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important;
+    z-index: 600 !important; min-height: 62px !important;
+    background: rgba(242,243,249,0.92) !important;
+    backdrop-filter: blur(18px) !important; -webkit-backdrop-filter: blur(18px) !important;
+    border-bottom: 1px solid rgba(22,53,204,0.07) !important;
+    padding: 0 2rem !important; margin: 0 !important;
+    align-items: center !important;
 }
-.zn-logo {
+
+/* Main container — leaves room for fixed topbar */
+.main .block-container {
+    padding-top: 78px !important; padding-left: 3.5rem !important;
+    padding-right: 3.5rem !important; padding-bottom: 4rem !important;
+    max-width: 100% !important; position: relative; z-index: 10;
+}
+
+/* ── Nav link buttons (marker-div targeting) ──
+   Usage: render <div class="znav [active]"></div> immediately before st.button()
+   The CSS adjacent-sibling selector styles that specific button.              */
+div.znav + [data-testid="stButton"] > button {
+    background: transparent !important; border: none !important;
+    box-shadow: none !important; color: #8892C0 !important;
+    font-size: 0.74rem !important; font-weight: 500 !important;
+    letter-spacing: 0.07em !important; text-transform: uppercase !important;
+    padding: 0 0.3rem !important; height: 62px !important;
+    border-radius: 0 !important; width: 100% !important;
+    border-bottom: 2px solid transparent !important;
+    transition: color 0.18s !important;
+}
+div.znav + [data-testid="stButton"] > button:hover {
+    color: #0D1F8A !important; background: transparent !important;
+}
+div.znav.active + [data-testid="stButton"] > button {
+    color: #0D1F8A !important; border-bottom-color: #0D1F8A !important;
+}
+
+/* Logo area */
+.zn-logo-area {
     display: flex; align-items: center; gap: 9px;
     font-size: 0.82rem; font-weight: 700; letter-spacing: 0.1em;
-    color: #0D1F8A; text-decoration: none !important;
-    font-family: 'Inter', sans-serif;
-}
-.zn-logo svg { flex-shrink: 0; }
-.zn-nav {
-    display: flex; gap: 2.4rem;
-    position: absolute; left: 50%; transform: translateX(-50%);
-}
-.zn-navlink {
-    font-family: 'Inter', sans-serif;
-    font-size: 0.76rem; font-weight: 500;
-    letter-spacing: 0.07em; color: #8892C0;
-    text-decoration: none !important;
-    transition: color 0.18s;
-    padding-bottom: 3px;
-    border-bottom: 2px solid transparent;
-}
-.zn-navlink:hover  { color: #0D1F8A; }
-.zn-navlink.active { color: #0D1F8A; border-bottom-color: #0D1F8A; }
-.zn-connect-btn {
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 0.42rem 1.25rem;
-    background: #0D1F8A; color: white !important;
-    border-radius: 50px; font-family: 'Inter', sans-serif;
-    font-size: 0.76rem; font-weight: 600; letter-spacing: 0.07em;
-    text-decoration: none !important; transition: background 0.18s;
+    color: #0D1F8A; padding: 0; line-height: 62px;
     white-space: nowrap;
 }
-.zn-connect-btn:hover { background: #1635CC; }
 
-/* ── Three floating right pills ── */
-.zn-float-pills {
-    position: fixed;
-    right: 4.5%;
-    top: 30%;
-    display: flex; flex-direction: column; gap: 13px;
-    z-index: 200;
+/* Connect / BRIEF button in topbar */
+div.znav-connect + [data-testid="stButton"] > button {
+    background: #0D1F8A !important; color: #fff !important;
+    border: none !important; border-radius: 50px !important;
+    font-size: 0.74rem !important; font-weight: 600 !important;
+    letter-spacing: 0.07em !important; text-transform: uppercase !important;
+    padding: 0.38rem 1.1rem !important; height: auto !important;
+    min-height: 36px !important;
+    box-shadow: 0 3px 14px rgba(13,31,138,0.28) !important;
+    transition: background 0.18s !important;
 }
-.zn-fpill {
-    display: inline-flex; align-items: center; gap: 10px;
-    padding: 12px 22px;
-    background: rgba(255,255,255,0.72);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255,255,255,0.88);
-    border-radius: 50px;
-    color: #0D1F8A !important;
-    font-family: 'Inter', sans-serif;
-    font-size: 0.86rem; font-weight: 500;
-    text-decoration: none !important;
-    min-width: 168px;
-    box-shadow: 0 4px 22px rgba(0,0,0,0.09);
-    transition: all 0.2s;
-    cursor: pointer;
-}
-.zn-fpill:nth-child(2) { margin-left: 18px; } /* stagger like Zeronode */
-.zn-fpill:hover {
-    background: rgba(255,255,255,0.92);
-    box-shadow: 0 6px 28px rgba(0,0,0,0.13);
-    transform: translateX(-3px);
-}
-.zn-fpill.active {
-    background: #0D1F8A;
-    color: white !important;
-    border-color: #0D1F8A;
-    box-shadow: 0 6px 28px rgba(13,31,138,0.42);
-}
-.zn-fpill-icon {
-    font-size: 1rem;
-    line-height: 1;
+div.znav-connect + [data-testid="stButton"] > button:hover {
+    background: #1635CC !important;
 }
 
-/* ── Hero section ── */
-.zn-hero { padding: 1.2rem 0 1.8rem; position: relative; z-index: 10; }
-.zn-badge-pill {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 0.38rem 1.05rem;
-    background: rgba(255,255,255,0.75);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(22,53,204,0.14);
-    border-radius: 50px;
-    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.11em;
-    color: #0D1F8A; margin-bottom: 1.5rem; font-family: 'Inter', sans-serif;
+/* ── Floating pill buttons (right column on Brief page) ──
+   Usage: render <div class="znfp [active]"></div> before st.button()          */
+div.znfp + [data-testid="stButton"] > button {
+    background: rgba(255,255,255,0.72) !important;
+    border: 1px solid rgba(255,255,255,0.88) !important;
+    border-radius: 50px !important; color: #0D1F8A !important;
+    font-size: 0.86rem !important; font-weight: 500 !important;
+    padding: 0.7rem 1.5rem !important; min-height: 50px !important;
+    backdrop-filter: blur(16px) !important;
+    box-shadow: 0 4px 22px rgba(0,0,0,0.09) !important;
+    justify-content: flex-start !important; text-align: left !important;
+    margin-bottom: 0 !important; width: 100% !important;
+    transition: all 0.2s !important;
 }
-.zn-headline {
-    font-size: 3.4rem !important; font-weight: 800 !important;
-    color: #0D1F8A !important; letter-spacing: -0.03em;
-    line-height: 1.07 !important; margin-bottom: 1.3rem !important;
-    font-family: 'Inter', sans-serif !important;
+div.znfp + [data-testid="stButton"] > button:hover {
+    background: rgba(255,255,255,0.92) !important;
+    box-shadow: 0 6px 28px rgba(0,0,0,0.13) !important;
+    transform: translateX(-3px) !important;
 }
-.zn-headline em { font-weight: 300 !important; font-style: italic; }
-.zn-hero-body {
-    font-size: 0.88rem; line-height: 1.72; color: #3D5299;
-    max-width: 310px; margin-bottom: 2rem;
-    font-family: 'Inter', sans-serif;
+div.znfp.active + [data-testid="stButton"] > button {
+    background: #0D1F8A !important; color: white !important;
+    border-color: #0D1F8A !important;
+    box-shadow: 0 6px 28px rgba(13,31,138,0.42) !important;
 }
 
-/* ── CTA buttons (override Streamlit) ── */
+/* ── Primary / secondary CTA buttons ── */
 .stButton > button[kind="primary"] {
     background: #0D1F8A !important; color: #fff !important;
     border: none !important; border-radius: 50px !important;
     font-family: 'Inter', sans-serif !important; font-weight: 600 !important;
-    font-size: 0.78rem !important; letter-spacing: 0.07em !important;
-    padding: 0.58rem 1.7rem !important;
-    box-shadow: 0 4px 20px rgba(13,31,138,0.3) !important;
-    transition: all 0.18s !important; text-transform: uppercase;
+    font-size: 0.76rem !important; letter-spacing: 0.07em !important;
+    text-transform: uppercase !important; padding: 0.55rem 1.6rem !important;
+    box-shadow: 0 4px 18px rgba(13,31,138,0.30) !important; transition: all 0.18s !important;
 }
 .stButton > button[kind="primary"]:hover {
     background: #1635CC !important;
-    box-shadow: 0 6px 24px rgba(13,31,138,0.42) !important;
+    box-shadow: 0 6px 22px rgba(13,31,138,0.42) !important;
     transform: translateY(-1px) !important;
 }
 .stButton > button[kind="secondary"] {
-    background: rgba(255,255,255,0.78) !important;
-    color: #0D1F8A !important;
-    border: 1.5px solid rgba(13,31,138,0.28) !important;
-    border-radius: 50px !important;
+    background: rgba(255,255,255,0.78) !important; color: #0D1F8A !important;
+    border: 1.5px solid rgba(13,31,138,0.28) !important; border-radius: 50px !important;
     font-family: 'Inter', sans-serif !important; font-weight: 500 !important;
-    font-size: 0.78rem !important; letter-spacing: 0.07em !important;
-    text-transform: uppercase;
-    backdrop-filter: blur(8px) !important;
+    font-size: 0.76rem !important; letter-spacing: 0.07em !important;
+    text-transform: uppercase !important; backdrop-filter: blur(8px) !important;
 }
 .stButton > button[kind="secondary"]:hover {
-    background: rgba(13,31,138,0.06) !important;
-    border-color: #0D1F8A !important;
+    background: rgba(13,31,138,0.06) !important; border-color: #0D1F8A !important;
 }
 .stDownloadButton > button {
-    background: rgba(255,255,255,0.82) !important;
-    color: #0D1F8A !important;
-    border: 1.5px solid rgba(13,31,138,0.25) !important;
-    border-radius: 50px !important;
-    font-family: 'Inter', sans-serif !important;
-    font-size: 0.78rem !important; font-weight: 500 !important;
+    background: rgba(255,255,255,0.82) !important; color: #0D1F8A !important;
+    border: 1.5px solid rgba(13,31,138,0.25) !important; border-radius: 50px !important;
+    font-family: 'Inter', sans-serif !important; font-size: 0.76rem !important;
 }
+
+/* ── Inputs ── */
+input, textarea, [data-testid="stTextInput"] input {
+    background: rgba(255,255,255,0.88) !important;
+    border: 1.5px solid rgba(13,31,138,0.16) !important;
+    border-radius: 12px !important; color: #0D1F8A !important;
+    font-family: 'Inter', sans-serif !important;
+}
+input:focus, textarea:focus {
+    border-color: #0D1F8A !important;
+    box-shadow: 0 0 0 3px rgba(13,31,138,0.1) !important;
+}
+[data-testid="stSelectbox"] > div > div {
+    background: rgba(255,255,255,0.88) !important;
+    border: 1.5px solid rgba(13,31,138,0.16) !important;
+    border-radius: 12px !important; color: #0D1F8A !important;
+}
+label { color: #3D5299 !important; font-size: 0.8rem !important; }
 
 /* ── Glass cards ── */
 .zn-card {
@@ -391,51 +334,40 @@ footer                          { display: none !important; }
     font-family: 'Inter', sans-serif;
 }
 
-/* ── Stats grid (bottom right card) ── */
-.zn-stats-grid {
-    display: flex; gap: 1.5rem; margin-bottom: 1rem;
+/* ── Hero ── */
+.zn-hero { padding: 1rem 0 1.8rem; position: relative; z-index: 10; }
+.zn-badge-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 0.38rem 1.05rem;
+    background: rgba(255,255,255,0.75); backdrop-filter: blur(10px);
+    border: 1px solid rgba(22,53,204,0.14); border-radius: 50px;
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.11em;
+    color: #0D1F8A; margin-bottom: 1.5rem; font-family: 'Inter', sans-serif;
 }
+.zn-headline {
+    font-size: 3.4rem !important; font-weight: 800 !important;
+    color: #0D1F8A !important; letter-spacing: -0.03em;
+    line-height: 1.07 !important; margin-bottom: 1.3rem !important;
+    font-family: 'Inter', sans-serif !important;
+}
+.zn-headline em { font-weight: 300 !important; font-style: italic; }
+.zn-hero-body {
+    font-size: 0.88rem; line-height: 1.72; color: #3D5299;
+    max-width: 310px; margin-bottom: 2rem; font-family: 'Inter', sans-serif;
+}
+
+/* ── Stats grid ── */
+.zn-stats-grid { display: flex; gap: 1.5rem; margin-bottom: 1rem; }
 .zn-stat { text-align: center; flex: 1; }
-.zn-stat-val {
-    font-size: 1.9rem; font-weight: 700; color: #0D1F8A;
-    font-family: 'Inter', sans-serif; line-height: 1;
-}
-.zn-stat-lbl {
-    font-size: 0.7rem; color: #8892C0; margin-top: 0.3rem;
-    font-family: 'Inter', sans-serif; letter-spacing: 0.03em;
-}
-
-/* ── Inputs ── */
-input, textarea, [data-testid="stTextInput"] input {
-    background: rgba(255,255,255,0.88) !important;
-    border: 1.5px solid rgba(13,31,138,0.16) !important;
-    border-radius: 12px !important;
-    color: #0D1F8A !important; font-family: 'Inter', sans-serif !important;
-}
-input:focus, textarea:focus {
-    border-color: #0D1F8A !important;
-    box-shadow: 0 0 0 3px rgba(13,31,138,0.1) !important;
-}
-[data-testid="stSelectbox"] > div > div {
-    background: rgba(255,255,255,0.88) !important;
-    border: 1.5px solid rgba(13,31,138,0.16) !important;
-    border-radius: 12px !important; color: #0D1F8A !important;
-}
-label { color: #3D5299 !important; font-size: 0.8rem !important; }
-
-/* ── Alerts ── */
-.stSuccess { background: rgba(13,31,138,0.06) !important; color: #0D1F8A !important;
-             border-left: 4px solid #1635CC !important; border-radius: 12px !important; }
-.stInfo    { background: rgba(255,255,255,0.6) !important; color: #3D5299 !important;
-             border-left: 4px solid rgba(13,31,138,0.3) !important; border-radius: 12px !important; }
-.stWarning { background: rgba(255,195,0,0.1) !important; border-radius: 12px !important; }
+.zn-stat-val { font-size: 1.9rem; font-weight: 700; color: #0D1F8A; font-family: 'Inter', sans-serif; line-height: 1; }
+.zn-stat-lbl { font-size: 0.7rem; color: #8892C0; margin-top: 0.3rem; font-family: 'Inter', sans-serif; }
 
 /* ── Page header for sub-pages ── */
 .zn-page-header { margin-bottom: 2rem; position: relative; z-index: 10; }
-.zn-page-title  {
+.zn-page-title {
     font-size: 2.2rem !important; font-weight: 700 !important;
-    color: #0D1F8A !important; letter-spacing: -0.02em; margin: 0.4rem 0 0.2rem !important;
-    font-family: 'Inter', sans-serif !important;
+    color: #0D1F8A !important; letter-spacing: -0.02em;
+    margin: 0.4rem 0 0.2rem !important; font-family: 'Inter', sans-serif !important;
 }
 .zn-badge-small {
     display: inline-flex; align-items: center; gap: 6px;
@@ -448,14 +380,13 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
 
 /* ── Query cards ── */
 .qcard {
-    background: rgba(255,255,255,0.62);
-    backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.85);
-    border-radius: 20px; padding: 1.2rem 1.4rem 1rem; margin-bottom: 0.9rem;
+    background: rgba(255,255,255,0.62); backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.85); border-radius: 20px;
+    padding: 1.2rem 1.4rem 1rem; margin-bottom: 0.9rem;
     box-shadow: 0 2px 16px rgba(13,31,138,0.06);
 }
-.qcard-num  { font-size: 0.67rem; color: #1635CC; font-weight: 700;
-              letter-spacing: 0.1em; text-transform: uppercase; }
-.qcard-text { font-size: 0.94rem; color: #0D1F8A; font-style: italic; margin: 0.3rem 0 0.8rem; }
+.qcard-num  { font-size:0.67rem; color:#1635CC; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; }
+.qcard-text { font-size:0.94rem; color:#0D1F8A; font-style:italic; margin:0.3rem 0 0.8rem; }
 .preview-strip { display:flex; gap:0.45rem; margin-bottom:0.8rem; }
 .preview-strip a  { flex:1; display:block; }
 .preview-strip img{ width:100%; height:90px; object-fit:cover; border-radius:10px;
@@ -474,7 +405,7 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
 .btn-a  { background:rgba(13,31,138,0.07); color:#0D1F8A !important; border-color:rgba(13,31,138,0.18); }
 .btn-r  { background:rgba(22,53,204,0.09); color:#1635CC !important; border-color:rgba(22,53,204,0.2); }
 
-/* ── Tags / badges ── */
+/* ── Misc ── */
 .kw-tag { display:inline-block; padding:0.2rem 0.76rem; margin:0.14rem;
           background:rgba(13,31,138,0.07); border:1px solid rgba(13,31,138,0.16);
           border-radius:50px; font-size:0.77rem; color:#1635CC;
@@ -483,83 +414,104 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
           font-size:0.64rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; }
 .badge-unsplash { background:rgba(13,31,138,0.09); color:#0D1F8A; }
 .badge-pexels   { background:rgba(22,53,204,0.12); color:#1635CC; }
-
-/* ── Filter chip labels ── */
 .filter-lbl { font-size:0.68rem; letter-spacing:0.12em; text-transform:uppercase;
-              color:#3D5299; font-weight:600; margin:0.9rem 0 0.3rem;
-              font-family:'Inter',sans-serif; }
-
-/* ── Palette swatches ── */
+              color:#3D5299; font-weight:600; margin:0.9rem 0 0.3rem; }
 .swatch-row { display:flex; gap:0.85rem; flex-wrap:wrap; margin:1rem 0; }
 .swatch { width:68px; text-align:center; }
 .swatch-block { width:68px; height:60px; border-radius:14px;
                 border:1px solid rgba(0,0,0,0.06); margin-bottom:0.32rem;
                 box-shadow:0 2px 10px rgba(0,0,0,0.1); }
 .swatch-hex { font-size:0.66rem; color:#3D5299; font-family:monospace; }
-
-/* ── Prompt box ── */
 .prompt-box { background:rgba(255,255,255,0.82); border:1.5px solid rgba(13,31,138,0.15);
               border-radius:16px; padding:1.3rem 1.5rem; font-size:0.86rem; color:#0D1F8A;
               font-family:monospace; line-height:1.72; white-space:pre-wrap; }
-
+.stSuccess { background:rgba(13,31,138,0.06) !important; color:#0D1F8A !important;
+             border-left:4px solid #1635CC !important; border-radius:12px !important; }
+.stInfo    { background:rgba(255,255,255,0.6) !important; color:#3D5299 !important;
+             border-left:4px solid rgba(13,31,138,0.3) !important; border-radius:12px !important; }
+.stWarning { background:rgba(255,195,0,0.1) !important; border-radius:12px !important; }
 hr { border-color:rgba(13,31,138,0.09) !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Background + fixed chrome
+# Background
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown('<div class="zn-blob" aria-hidden="true"></div>'
             '<div class="zn-bottom-fade" aria-hidden="true"></div>',
             unsafe_allow_html=True)
 
-# Top navigation bar
-def _nc(p): return "zn-navlink active" if p == page else "zn-navlink"
-nav_map = [("HOME","Brief"),("SEARCH","Search"),("BROWSE","Browse"),
-           ("PALETTE","Palette"),("BOARD","Board"),("PROMPT","Prompt")]
-nav_links = "".join(f'<a href="?page={pv}" class="{_nc(pv)}">{pl}</a>' for pl, pv in nav_map)
-brief_lbl = (st.session_state.brief_space[:11]+"…" if len(st.session_state.brief_space)>11
-             else st.session_state.brief_space) if st.session_state.brief_space else "BRIEF"
+# ══════════════════════════════════════════════════════════════════════════════
+# Topbar  — Streamlit buttons styled as nav links via the marker-div trick
+# JS makes the first stHorizontalBlock fixed via .zn-topnav class
+# ══════════════════════════════════════════════════════════════════════════════
+c_logo, c1, c2, c3, c4, c5, c6, c_conn = st.columns([2, 0.9, 0.9, 0.95, 0.95, 0.85, 0.85, 1.7])
 
-st.markdown(f"""
-<div class="zn-topbar">
-  <a href="?page=Brief" class="zn-logo">
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="9" cy="9" r="2" fill="#0D1F8A"/>
-      <line x1="9" y1="1" x2="9" y2="4.5" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
-      <line x1="9" y1="13.5" x2="9" y2="17" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
-      <line x1="1" y1="9" x2="4.5" y2="9" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
-      <line x1="13.5" y1="9" x2="17" y2="9" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
-      <line x1="3.22" y1="3.22" x2="5.64" y2="5.64" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
-      <line x1="12.36" y1="12.36" x2="14.78" y2="14.78" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
-      <line x1="14.78" y1="3.22" x2="12.36" y2="5.64" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
-      <line x1="5.64" y1="12.36" x2="3.22" y2="14.78" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
-    </svg>
-    RENDER FINDER
-  </a>
-  <nav class="zn-nav">{nav_links}</nav>
-  <a href="?page=Brief" class="zn-connect-btn">{brief_lbl} ●</a>
-</div>
-""", unsafe_allow_html=True)
+with c_logo:
+    st.markdown("""
+    <div class="zn-logo-area">
+      <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
+        <circle cx="9" cy="9" r="1.9" fill="#0D1F8A"/>
+        <line x1="9" y1="1" x2="9" y2="4.5" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+        <line x1="9" y1="13.5" x2="9" y2="17" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+        <line x1="1" y1="9" x2="4.5" y2="9" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+        <line x1="13.5" y1="9" x2="17" y2="9" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+        <line x1="3.22" y1="3.22" x2="5.64" y2="5.64" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+        <line x1="12.36" y1="12.36" x2="14.78" y2="14.78" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+        <line x1="14.78" y1="3.22" x2="12.36" y2="5.64" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+        <line x1="5.64" y1="12.36" x2="3.22" y2="14.78" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      RENDER FINDER
+    </div>""", unsafe_allow_html=True)
 
-# Three floating right pills (always visible — like Zeronode's Transparency/Regeneration/Intelligence)
-fp_items = [
-    ("⊕", "Search Refs",   "Search"),
-    ("⊟", "Browse Images", "Browse"),
-    ("✦", "AI Prompt",     "Prompt"),
-]
-fp_html = "".join(
-    f'<a href="?page={fp_p}" class="zn-fpill{"  active" if page == fp_p else ""}">'
-    f'<span class="zn-fpill-icon">{fp_ic}</span>{fp_lb}</a>'
-    for fp_ic, fp_lb, fp_p in fp_items
-)
-st.markdown(f'<div class="zn-float-pills">{fp_html}</div>', unsafe_allow_html=True)
+nav_items = [("HOME","Brief"),("SEARCH","Search"),("BROWSE","Browse"),
+             ("PALETTE","Palette"),("BOARD","Board"),("PROMPT","Prompt")]
+for col, (label, p) in zip([c1,c2,c3,c4,c5,c6], nav_items):
+    with col:
+        active_cls = "znav active" if page == p else "znav"
+        st.markdown(f'<div class="{active_cls}"></div>', unsafe_allow_html=True)
+        if st.button(label, key=f"nav_{p}", use_container_width=True):
+            go_to(p)
+
+with c_conn:
+    brief_lbl = (st.session_state.brief_space[:10]+"…"
+                 if len(st.session_state.brief_space) > 10
+                 else st.session_state.brief_space) if st.session_state.brief_space else "BRIEF"
+    st.markdown('<div class="znav-connect"></div>', unsafe_allow_html=True)
+    if st.button(f"{brief_lbl} ●", key="nav_connect", use_container_width=True):
+        go_to("Brief")
+
+# JS: fix the first stHorizontalBlock as topbar + re-attach after React rerenders
+components.html("""
+<script>
+(function() {
+    function tag() {
+        try {
+            var doc = window.parent.document;
+            var first = doc.querySelector('[data-testid="stHorizontalBlock"]');
+            if (first && !first.classList.contains('zn-topnav')) {
+                first.classList.add('zn-topnav');
+            }
+        } catch(e) {}
+    }
+    tag();
+    // Re-attach after React reconciles the DOM
+    try {
+        var obs = new MutationObserver(tag);
+        obs.observe(window.parent.document.body, {childList: true, subtree: true});
+    } catch(e) {
+        setInterval(tag, 300);
+    }
+})();
+</script>
+""", height=0, scrolling=False)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# BRIEF  (home page — exact Zeronode hero layout)
+# PAGE: Brief  (Zeronode hero layout)
 # ══════════════════════════════════════════════════════════════════════════════
 if page == "Brief":
-    hero_col, _ = st.columns([5, 5])
+    hero_col, gap_col, pills_col = st.columns([4.5, 1, 2.5])
+
     with hero_col:
         st.markdown("""
         <div class="zn-hero">
@@ -573,7 +525,7 @@ if page == "Brief":
         </div>
         """, unsafe_allow_html=True)
 
-        b1, b2, _ = st.columns([2.4, 2.1, 2])
+        b1, b2, _ = st.columns([2.4, 2, 2])
         with b1:
             if st.button("FIND REFERENCES →", type="primary", key="cta_find", use_container_width=True):
                 if not st.session_state.brief_space or not st.session_state.brief_mood:
@@ -581,36 +533,46 @@ if page == "Brief":
                 else:
                     brief = {k: st.session_state[f"brief_{k}"] for k in ["space","style","mood","background"]}
                     if not st.session_state.history or st.session_state.history[0] != brief:
-                        st.session_state.history.insert(0, brief); st.session_state.history = st.session_state.history[:5]
+                        st.session_state.history.insert(0, brief)
+                        st.session_state.history = st.session_state.history[:5]
                     go_to("Search")
         with b2:
             if st.button("BROWSE IMAGES", key="cta_browse", use_container_width=True):
                 go_to("Browse")
 
-    # ── Bottom cards (like "BUILDING THE FOUNDATION" + "STAY CONNECTED") ──────
-    st.markdown("<div style='height:3.5rem'></div>", unsafe_allow_html=True)
-    card_left, _, card_right = st.columns([4.5, 0.4, 2.6])
-
-    with card_left:
-        st.markdown('<div class="zn-card">', unsafe_allow_html=True)
-        st.markdown('<div class="zn-card-label">YOUR BRIEF</div>', unsafe_allow_html=True)
-
-        st.selectbox("tmpl", list(TEMPLATES.keys()), key="template_selector",
-                     on_change=on_template_change, label_visibility="collapsed")
-
-        ci1, ci2 = st.columns(2)
-        with ci1:
-            st.text_input("Space", placeholder="e.g. living room",
-                          key="brief_space", label_visibility="visible")
-        with ci2:
-            st.selectbox("Style", STYLE_OPTIONS, key="brief_style",
-                         label_visibility="visible")
-        st.text_input("Mood", placeholder="e.g. warm, earthy, editorial",
-                      key="brief_mood", label_visibility="visible")
-
+    # Three floating right pills (Transparency / Regeneration / Intelligence equivalent)
+    with pills_col:
+        st.markdown("<div style='padding-top:4rem'>", unsafe_allow_html=True)
+        fp_items = [
+            ("⊕  Search Refs",   "Search"),
+            ("⊟  Browse Images", "Browse"),
+            ("✦  AI Prompt",     "Prompt"),
+        ]
+        for label, p in fp_items:
+            active_cls = "znfp active" if page == p else "znfp"
+            st.markdown(f'<div class="{active_cls}"></div>', unsafe_allow_html=True)
+            if st.button(label, key=f"fp_{p}", use_container_width=True):
+                go_to(p)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    with card_right:
+    # Bottom glass cards
+    st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
+    card_l, _, card_r = st.columns([4.5, 0.4, 2.6])
+
+    with card_l:
+        st.markdown('<div class="zn-card">', unsafe_allow_html=True)
+        st.markdown('<div class="zn-card-label">YOUR BRIEF</div>', unsafe_allow_html=True)
+        st.selectbox("template", list(TEMPLATES.keys()), key="template_selector",
+                     on_change=on_template_change, label_visibility="collapsed")
+        ci1, ci2 = st.columns(2)
+        with ci1:
+            st.text_input("Space", placeholder="e.g. living room", key="brief_space")
+        with ci2:
+            st.selectbox("Style", STYLE_OPTIONS, key="brief_style")
+        st.text_input("Mood", placeholder="e.g. warm, earthy, editorial", key="brief_mood")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with card_r:
         st.markdown('<div class="zn-card">', unsafe_allow_html=True)
         st.markdown('<div class="zn-card-label">SESSION</div>', unsafe_allow_html=True)
         n_b = len(st.session_state.selected_images)
@@ -618,24 +580,13 @@ if page == "Brief":
         n_q = len(st.session_state.generated_queries)
         st.markdown(f"""
         <div class="zn-stats-grid">
-          <div class="zn-stat">
-            <div class="zn-stat-val">{n_b}</div>
-            <div class="zn-stat-lbl">Board</div>
-          </div>
-          <div class="zn-stat">
-            <div class="zn-stat-val">{n_h}</div>
-            <div class="zn-stat-lbl">Briefs</div>
-          </div>
-          <div class="zn-stat">
-            <div class="zn-stat-val">{n_q}</div>
-            <div class="zn-stat-lbl">Queries</div>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
-
+          <div class="zn-stat"><div class="zn-stat-val">{n_b}</div><div class="zn-stat-lbl">Board</div></div>
+          <div class="zn-stat"><div class="zn-stat-val">{n_h}</div><div class="zn-stat-lbl">Briefs</div></div>
+          <div class="zn-stat"><div class="zn-stat-val">{n_q}</div><div class="zn-stat-lbl">Queries</div></div>
+        </div>""", unsafe_allow_html=True)
         if st.session_state.history:
             last = st.session_state.history[0]
-            st.markdown(f"<div style='font-size:0.77rem;color:#3D5299;margin-top:0.5rem'>"
+            st.markdown(f"<div style='font-size:0.77rem;color:#3D5299;margin-top:0.4rem'>"
                         f"Last: {last['space']} · {last['style']}</div>", unsafe_allow_html=True)
         if n_b:
             if st.button("Open Mood Board →", use_container_width=True):
@@ -643,13 +594,11 @@ if page == "Brief":
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SEARCH
+# PAGE: Search
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Search":
-    st.markdown('<div class="zn-page-header">'
-                '<div class="zn-badge-small">● AI-GENERATED</div>'
-                '<h2 class="zn-page-title">Reference Queries</h2></div>',
-                unsafe_allow_html=True)
+    st.markdown('<div class="zn-page-header"><div class="zn-badge-small">● AI-GENERATED</div>'
+                '<h2 class="zn-page-title">Reference Queries</h2></div>', unsafe_allow_html=True)
 
     if st.button("Generate Queries", type="primary"):
         sp = st.session_state.brief_space; mo = st.session_state.brief_mood
@@ -686,7 +635,7 @@ elif page == "Search":
             strip = ""
             if previews:
                 strip = '<div class="preview-strip">' + "".join(
-                    f'<a href="{p["link"]}" target="_blank"><img src="{p["thumb"]}" alt="{p["author"]}"></a>'
+                    f'<a href="{p["link"]}" target="_blank"><img src="{p["thumb"]}" alt=""></a>'
                     for p in previews[:3]) + "</div>"
             elif has_keys:
                 strip = '<div class="preview-strip">' + '<div class="preview-ph"></div>'*3 + "</div>"
@@ -704,19 +653,17 @@ elif page == "Search":
               </div>
             </div>""", unsafe_allow_html=True)
         if not has_keys:
-            st.info("Add **UNSPLASH_ACCESS_KEY** or **PEXELS_API_KEY** to secrets to see image previews.")
+            st.info("Add **UNSPLASH_ACCESS_KEY** or **PEXELS_API_KEY** to secrets for image previews.")
         st.success(f"{len(lines)} queries generated.")
     else:
         st.info("Click **Generate Queries** to create AI-powered search queries from your brief.")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# BROWSE
+# PAGE: Browse
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Browse":
-    st.markdown('<div class="zn-page-header">'
-                '<div class="zn-badge-small">● NO AI NEEDED</div>'
-                '<h2 class="zn-page-title">Browse & Filter</h2></div>',
-                unsafe_allow_html=True)
+    st.markdown('<div class="zn-page-header"><div class="zn-badge-small">● NO AI NEEDED</div>'
+                '<h2 class="zn-page-title">Browse & Filter</h2></div>', unsafe_allow_html=True)
 
     st.markdown("<div class='filter-lbl'>Space</div>", unsafe_allow_html=True)
     sel_spaces = st.pills("spaces", FILTER_SPACES, selection_mode="multi", label_visibility="collapsed")
@@ -773,21 +720,17 @@ elif page == "Browse":
                 with col:
                     st.caption(f"{img['source'].upper()} — {img['author']}")
                     st.image(img["full"], use_container_width=True)
-                    st.markdown(f"[Open original ↗]({img['link']})")
             if st.button("Clear comparison"):
                 st.session_state.comparison_images = []; st.rerun()
     else:
         st.info("Select filters and click **Browse Images**, or use **Browse from Brief**.")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PALETTE
+# PAGE: Palette
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Palette":
-    st.markdown('<div class="zn-page-header">'
-                '<div class="zn-badge-small">● COLOR EXTRACTION</div>'
-                '<h2 class="zn-page-title">Palette Extractor</h2></div>',
-                unsafe_allow_html=True)
-
+    st.markdown('<div class="zn-page-header"><div class="zn-badge-small">● COLOR EXTRACTION</div>'
+                '<h2 class="zn-page-title">Palette Extractor</h2></div>', unsafe_allow_html=True)
     st.markdown('<div class="zn-card">', unsafe_allow_html=True)
     palette_url = st.text_input("Image URL", placeholder="https://images.unsplash.com/photo-...")
     n_colors = st.slider("Number of colors", 3, 10, 6)
@@ -802,26 +745,21 @@ elif page == "Palette":
             else:
                 st.markdown(
                     "<div class='swatch-row'>" +
-                    "".join(f"<div class='swatch'>"
-                             f"<div class='swatch-block' style='background:{h}'></div>"
-                             f"<div class='swatch-hex'>{h}</div></div>"
-                            for h in hexes) + "</div>", unsafe_allow_html=True)
-                dl_col, _ = st.columns([1, 3])
+                    "".join(f"<div class='swatch'><div class='swatch-block' style='background:{h}'></div>"
+                             f"<div class='swatch-hex'>{h}</div></div>" for h in hexes) +
+                    "</div>", unsafe_allow_html=True)
+                dl_col, _ = st.columns([1,3])
                 with dl_col:
-                    st.download_button("Download CSV", ",".join(hexes).encode(),
-                                       "palette.csv", "text/csv")
+                    st.download_button("Download CSV", ",".join(hexes).encode(), "palette.csv", "text/csv")
                 st.success(f"Extracted {len(hexes)} colors.")
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# BOARD
+# PAGE: Board
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Board":
-    st.markdown('<div class="zn-page-header">'
-                '<div class="zn-badge-small">● EXPORT</div>'
-                '<h2 class="zn-page-title">Mood Board</h2></div>',
-                unsafe_allow_html=True)
-
+    st.markdown('<div class="zn-page-header"><div class="zn-badge-small">● EXPORT</div>'
+                '<h2 class="zn-page-title">Mood Board</h2></div>', unsafe_allow_html=True)
     if not st.session_state.selected_images:
         st.info("Browse images on **Browse** and click **+ Board** to add them here.")
     else:
@@ -855,14 +793,11 @@ elif page == "Board":
                 st.session_state.selected_images = []; st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PROMPT
+# PAGE: Prompt
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Prompt":
-    st.markdown('<div class="zn-page-header">'
-                '<div class="zn-badge-small">● AI GENERATION</div>'
-                '<h2 class="zn-page-title">Prompt Generator</h2></div>',
-                unsafe_allow_html=True)
-
+    st.markdown('<div class="zn-page-header"><div class="zn-badge-small">● AI GENERATION</div>'
+                '<h2 class="zn-page-title">Prompt Generator</h2></div>', unsafe_allow_html=True)
     platform = st.radio("Platform", ["Midjourney", "Stable Diffusion", "Both"], horizontal=True)
 
     p_space = st.session_state.brief_space or ""
@@ -903,6 +838,6 @@ elif page == "Prompt":
             dl_col, _ = st.columns([1,3])
             with dl_col:
                 st.download_button("Download .txt", result.encode(), "prompt.txt", "text/plain")
-            st.success("Prompt ready — paste directly into Midjourney or SD.")
+            st.success("Prompt ready.")
     else:
         st.info("Set your brief on the **Home** page then click **Generate Prompt**.")
