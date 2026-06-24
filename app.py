@@ -156,6 +156,7 @@ hr { border-color: #C8BFB5 !important; }
 .btn-behance    { background-color: #1769FF; color: #fff !important; }
 .btn-google     { background-color: #F5F0EA; color: #2C2520 !important; border: 1px solid #C8BFB5; }
 .btn-archinect  { background-color: #2C2520; color: #EDE8E1 !important; }
+.btn-arena      { background-color: #7D9178; color: #fff !important; }
 
 /* ── Query row ── */
 .query-row {
@@ -265,6 +266,7 @@ if find_btn:
             behance_url    = f"https://www.behance.net/search/projects?search={enc}"
             google_url     = f"https://www.google.com/search?tbm=isch&q={enc}"
             archinect_url  = f"https://archinect.com/search#/?q={enc}&type=photos"
+            arena_url      = f"https://www.are.na/search/{enc}"
 
             rows_html += f"""
             <div class="query-row">
@@ -274,6 +276,7 @@ if find_btn:
                 <a class="ref-btn btn-behance"    href="{behance_url}"    target="_blank" rel="noopener">Behance</a>
                 <a class="ref-btn btn-google"     href="{google_url}"     target="_blank" rel="noopener">Google Images</a>
                 <a class="ref-btn btn-archinect"  href="{archinect_url}"  target="_blank" rel="noopener">Archinect</a>
+                <a class="ref-btn btn-arena"      href="{arena_url}"      target="_blank" rel="noopener">Are.na</a>
             </div>"""
 
         st.markdown(rows_html, unsafe_allow_html=True)
