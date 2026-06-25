@@ -180,7 +180,15 @@ def extract_brief_from_file(file_bytes, mime_type):
 
 def extract_palette_from_bytes(file_bytes, n=6):
     try:
-        ct = ColorThief(io.BytesIO(file_bytes))
+        # Resize large images before extraction to prevent memory crash
+        img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
+        max_dim = 800
+        if max(img.size) > max_dim:
+            img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        buf.seek(0)
+        ct = ColorThief(buf)
         return [f"#{rv:02x}{g:02x}{b:02x}" for rv, g, b in ct.get_palette(color_count=n, quality=1)]
     except:
         return []
