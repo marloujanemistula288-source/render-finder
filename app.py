@@ -681,6 +681,8 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
 .btn-g  { background:rgba(255,255,255,0.8); color:#0D1F8A !important; border-color:rgba(13,31,138,0.18); }
 .btn-a  { background:rgba(13,31,138,0.07); color:#0D1F8A !important; border-color:rgba(13,31,138,0.18); }
 .btn-r  { background:rgba(22,53,204,0.09); color:#1635CC !important; border-color:rgba(22,53,204,0.2); }
+.btn-f  { background:rgba(255,50,0,0.08);  color:#e63000 !important; border-color:rgba(255,50,0,0.2); }
+.btn-t  { background:rgba(0,168,120,0.08); color:#00956a !important; border-color:rgba(0,168,120,0.2); }
 
 /* ── Misc ── */
 .kw-tag { display:inline-block; padding:0.2rem 0.76rem; margin:0.14rem;
@@ -1012,6 +1014,15 @@ elif page == "Search":
                 '<h2 class="zn-page-title">Reference Queries</h2></div>', unsafe_allow_html=True)
 
     white_bg_only = st.checkbox("White / isolated backgrounds only (for Photoshop cutouts)", key="search_white_bg")
+
+    render_elem = st.checkbox("Render Elements mode — find plant, tree, people & furniture cutouts for compositing", key="search_render_elem")
+    elem_type = None
+    if render_elem:
+        elem_type = st.selectbox("Element type",
+            ["Plants & Vegetation", "Trees & Shrubs", "Wildflowers & Meadow Grasses",
+             "People / Scale Figures", "Furniture & Objects", "Vehicles & Bikes"],
+            key="search_elem_type", label_visibility="collapsed")
+
     if st.button("Generate Queries", type="primary"):
         _snap = st.session_state.get("_brief_snapshot", {})
         sp = st.session_state.brief_space or _snap.get("space", "")
@@ -1024,11 +1035,24 @@ elif page == "Search":
             brief = {"space":sp,"style":sty,"mood":mo,"background":bg}
             if not st.session_state.history or st.session_state.history[0] != brief:
                 st.session_state.history.insert(0,brief); st.session_state.history = st.session_state.history[:5]
-            bg_note = (" Prioritise queries that surface white-background or isolated-object shots suitable for Photoshop compositing."
-                       if white_bg_only else "")
-            prompt = (f"Generate 5 targeted search queries for a designer finding Photoshop render references. "
-                      f"Brief — Space: {sp}, Style: {sty}, Mood: {mo}, Background: {bg}.{bg_note} "
-                      f"Use designer vocabulary. Return numbered list only, no extra text.")
+            if render_elem and elem_type:
+                prompt = (
+                    f"Generate 5 highly specific search queries to find isolated Photoshop render entourage elements — "
+                    f"cutouts on white or transparent backgrounds for architectural compositing. "
+                    f"Element type: {elem_type}. Style context: {sty}, Mood: {mo}. "
+                    f"Each query MUST include at least one term from this list: "
+                    f"'PNG transparent background', 'isolated cutout', 'white background photoshop', "
+                    f"'architectural entourage', 'render element', 'cutout transparent', 'isolated on white'. "
+                    f"Use specific botanical, material, or design vocabulary (e.g. pampas grass, ornamental grass, "
+                    f"prairie wildflowers, mixed shrubbery, tall grasses). "
+                    f"Return numbered list only, no extra text."
+                )
+            else:
+                bg_note = (" Prioritise queries that surface white-background or isolated-object shots suitable for Photoshop compositing."
+                           if white_bg_only else "")
+                prompt = (f"Generate 5 targeted search queries for a designer finding Photoshop render references. "
+                          f"Brief — Space: {sp}, Style: {sty}, Mood: {mo}, Background: {bg}.{bg_note} "
+                          f"Use designer vocabulary. Return numbered list only, no extra text.")
             with st.spinner("Generating queries..."):
                 resp = client.messages.create(model="claude-haiku-4-5-20251001", max_tokens=512,
                     messages=[{"role":"user","content":prompt}])
@@ -1057,18 +1081,28 @@ elif page == "Search":
                     for p in previews[:3]) + "</div>"
             elif has_keys:
                 strip = '<div class="preview-strip">' + '<div class="preview-ph"></div>'*3 + "</div>"
+            if st.session_state.get("search_render_elem"):
+                src_buttons = (
+                    f'<a class="ref-btn btn-p" href="https://www.pinterest.com/search/pins/?q={enc}" target="_blank">Pinterest</a>'
+                    f'<a class="ref-btn btn-g" href="https://www.google.com/search?tbm=isch&q={enc}" target="_blank">Google Images</a>'
+                    f'<a class="ref-btn btn-f" href="https://www.freepik.com/search?query={enc}" target="_blank">Freepik</a>'
+                    f'<a class="ref-btn btn-t" href="https://pngtree.com/search?q={enc}" target="_blank">PNGTree</a>'
+                    f'<a class="ref-btn btn-b" href="https://www.behance.net/search/projects?search={enc}" target="_blank">Behance</a>'
+                )
+            else:
+                src_buttons = (
+                    f'<a class="ref-btn btn-p" href="https://www.pinterest.com/search/pins/?q={enc}" target="_blank">Pinterest</a>'
+                    f'<a class="ref-btn btn-b" href="https://www.behance.net/search/projects?search={enc}" target="_blank">Behance</a>'
+                    f'<a class="ref-btn btn-g" href="https://www.google.com/search?tbm=isch&q={enc}" target="_blank">Google Images</a>'
+                    f'<a class="ref-btn btn-a" href="https://archinect.com/search#/?q={enc}&type=photos" target="_blank">Archinect</a>'
+                    f'<a class="ref-btn btn-r" href="https://www.are.na/search/{enc}" target="_blank">Are.na</a>'
+                )
             st.markdown(f"""
             <div class="qcard">
               <div class="qcard-num">Query {i}</div>
               <div class="qcard-text">{qt}</div>
               {strip}
-              <div class="btn-row">
-                <a class="ref-btn btn-p" href="https://www.pinterest.com/search/pins/?q={enc}" target="_blank">Pinterest</a>
-                <a class="ref-btn btn-b" href="https://www.behance.net/search/projects?search={enc}" target="_blank">Behance</a>
-                <a class="ref-btn btn-g" href="https://www.google.com/search?tbm=isch&q={enc}" target="_blank">Google Images</a>
-                <a class="ref-btn btn-a" href="https://archinect.com/search#/?q={enc}&type=photos" target="_blank">Archinect</a>
-                <a class="ref-btn btn-r" href="https://www.are.na/search/{enc}" target="_blank">Are.na</a>
-              </div>
+              <div class="btn-row">{src_buttons}</div>
             </div>""", unsafe_allow_html=True)
         if not has_keys:
             st.info("Add **UNSPLASH_ACCESS_KEY** or **PEXELS_API_KEY** to secrets for image previews.")
