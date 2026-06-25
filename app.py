@@ -1232,12 +1232,15 @@ elif page == "Palette":
         pal_file = st.file_uploader("Upload image (JPG, PNG, WEBP)", type=["jpg","jpeg","png","webp"],
                                      label_visibility="collapsed", key="pal_upload")
         if pal_file:
-            file_bytes = pal_file.read()
-            st.session_state["_pal_bytes"] = file_bytes
-            st.session_state["_pal_name"] = pal_file.name
-            col_img, _ = st.columns([2, 3])
-            with col_img:
-                st.image(file_bytes, caption=pal_file.name, use_container_width=True)
+            try:
+                file_bytes = pal_file.read()
+                st.session_state["_pal_bytes"] = file_bytes
+                st.session_state["_pal_name"] = pal_file.name
+                col_img, _ = st.columns([2, 3])
+                with col_img:
+                    st.image(file_bytes, caption=pal_file.name, use_container_width=True)
+            except Exception as e:
+                st.warning(f"Could not preview image: {e}")
 
         if st.button("Extract Palette from Upload", type="primary", key="pal_upload_btn"):
             fb = st.session_state.get("_pal_bytes")
