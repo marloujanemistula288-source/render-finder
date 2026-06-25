@@ -1038,7 +1038,7 @@ elif page == "Search":
         _snap = st.session_state.get("_brief_snapshot", {})
         sp = st.session_state.brief_space or _snap.get("space", "")
         mo = st.session_state.brief_mood or _snap.get("mood", "")
-        if not sp or not mo:
+        if not render_elem and (not sp or not mo):
             st.warning("Go to **Home** and fill in Space and Mood first.")
         else:
             sty = st.session_state.brief_style or _snap.get("style", "Dreamy")
