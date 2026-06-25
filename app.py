@@ -31,6 +31,20 @@ PAGE_TO_NAV = {"Brief":"Home","Search":"Search","Browse":"Browse","Palette":"Pal
 NAV_TO_PAGE = {"Home":"Brief","Search":"Search","Browse":"Browse","Palette":"Palette","Board":"Board","Prompt":"Prompt"}
 STYLE_OPTIONS = ["Dreamy", "Dark Moody", "Minimal", "Maximalist", "Realistic CGI"]
 BG_OPTIONS    = ["White/Isolated", "Scene", "Any"]
+
+# Streamlit 1.58 forbids setting widget-bound session keys after the widget renders.
+# The extract-brief flow stores results here, reruns, then this block pre-populates
+# the keys before any widget is instantiated.
+if "_brief_extracted" in st.session_state:
+    _ext = st.session_state.pop("_brief_extracted")
+    if _ext.get("space"):
+        st.session_state["brief_space"] = _ext["space"]
+    if _ext.get("style") and _ext["style"] in STYLE_OPTIONS:
+        st.session_state["brief_style"] = _ext["style"]
+    if _ext.get("mood"):
+        st.session_state["brief_mood"] = _ext["mood"]
+    if _ext.get("background") and _ext["background"] in BG_OPTIONS:
+        st.session_state["brief_background"] = _ext["background"]
 FILTER_SPACES = ["Living Room","Bedroom","Kitchen","Office","Courtyard","Exterior","Dining Room","Studio","Bathroom"]
 FILTER_STYLES = ["Dreamy","Minimal","Dark Moody","Maximalist","Brutalist","Japandi","Bohemian","Industrial","Coastal"]
 FILTER_MOODS  = ["Warm","Cool","Cozy","Editorial","Raw","Airy","Dramatic","Serene","Earthy","Luxe"]
@@ -248,7 +262,7 @@ def render_image_grid(images, key_prefix="img"):
         on_board   = any(x["thumb"] == img["thumb"] for x in st.session_state.selected_images)
         on_compare = any(x["thumb"] == img["thumb"] for x in st.session_state.comparison_images)
         with cols3[i % 3]:
-            st.image(img["thumb"], use_container_width=True)
+            st.image(img["thumb"], width="stretch")
             st.markdown(f'<span class="badge {bc}">{bl}</span> '
                         f'<a href="{img["link"]}" target="_blank" '
                         f'style="font-size:0.74rem;color:#3D5299;text-decoration:none;">'
@@ -939,13 +953,7 @@ if page == "Brief":
                 with st.spinner("Reading brief with Claude AI..."):
                     extracted = extract_brief_from_file(file_bytes, mime)
                 if extracted:
-                    if extracted.get("space"): st.session_state.brief_space = extracted["space"]
-                    if extracted.get("style") and extracted["style"] in STYLE_OPTIONS:
-                        st.session_state.brief_style = extracted["style"]
-                    if extracted.get("mood"): st.session_state.brief_mood = extracted["mood"]
-                    if extracted.get("background") and extracted["background"] in BG_OPTIONS:
-                        st.session_state.brief_background = extracted["background"]
-                    st.success(f"Brief extracted: {extracted.get('space','')} · {extracted.get('style','')} · {extracted.get('mood','')}")
+                    st.session_state["_brief_extracted"] = extracted
                     st.rerun()
                 else:
                     st.warning("Could not extract brief — try a clearer image or PDF.")
@@ -1179,7 +1187,7 @@ elif page == "Browse":
             for col, img in zip([ca, cb], st.session_state.comparison_images):
                 with col:
                     st.caption(f"{img['source'].upper()} — {img['author']}")
-                    st.image(img["full"], use_container_width=True)
+                    st.image(img["full"], width="stretch")
             if st.button("Clear comparison"):
                 st.session_state.comparison_images = []; st.rerun()
     else:
@@ -1238,7 +1246,7 @@ elif page == "Palette":
                 st.session_state["_pal_name"] = pal_file.name
                 col_img, _ = st.columns([2, 3])
                 with col_img:
-                    st.image(file_bytes, caption=pal_file.name, use_container_width=True)
+                    st.image(file_bytes, caption=pal_file.name, width="stretch")
             except Exception as e:
                 st.warning(f"Could not preview image: {e}")
 
@@ -1280,7 +1288,7 @@ elif page == "Palette":
             for i, img in enumerate(board_imgs):
                 c_img, c_btn = st.columns([2, 3])
                 with c_img:
-                    st.image(img["thumb"], use_container_width=True)
+                    st.image(img["thumb"], width="stretch")
                     st.caption(f"{img['source'].upper()} — {img['author']}")
                 with c_btn:
                     if st.button(f"Extract from image {i+1}", key=f"pal_board_{i}"):
@@ -1309,7 +1317,7 @@ elif page == "Board":
         prev_cols = st.columns(min(len(imgs), 4))
         for i, img in enumerate(imgs):
             with prev_cols[i % 4]:
-                st.image(img["thumb"], use_container_width=True)
+                st.image(img["thumb"], width="stretch")
                 if st.button("Remove", key=f"rm_{i}", use_container_width=True):
                     st.session_state.selected_images.pop(i); st.rerun()
         st.divider()
