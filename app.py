@@ -1002,14 +1002,16 @@ if page == "Brief":
         <div class="sc-body">Forward your curated board references straight to your inbox.</div>
         """, unsafe_allow_html=True)
         board_email = st.text_input("Email", placeholder="you@studio.com",
-                                    key="board_email_input", label_visibility="collapsed")
-        if st.button("Send Board →", key="send_board_btn", type="primary", use_container_width=True):
-            if not board_email or "@" not in board_email:
-                st.warning("Enter a valid email address.")
-            elif not st.session_state.selected_images:
-                st.warning("Add images to your Board first.")
-            else:
-                sent, msg = send_board_email(board_email, st.session_state.selected_images)
+                            key="board_email_input", label_visibility="collapsed")
+if st.button("Send Board →", key="send_board_btn", type="primary", use_container_width=True):
+    _email = st.session_state.get("board_email_input", "").strip()
+    _imgs  = st.session_state.get("selected_images", [])
+    if not _email or "@" not in _email:
+        st.warning("Enter a valid email address.")
+    elif not _imgs:
+        st.warning("Add images to your Board first.")
+    else:
+        sent, msg = send_board_email(_email, _imgs)
                 if sent:
                     st.success(f"Board sent to {board_email}!")
                 elif msg == "no_smtp":
