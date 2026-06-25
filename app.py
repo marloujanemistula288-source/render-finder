@@ -15,6 +15,7 @@ st.set_page_config(page_title="Render Finder", layout="wide", initial_sidebar_st
 _defaults = {
     "history": [], "selected_images": [], "comparison_images": [],
     "browse_results": [], "filter_results": [], "generated_queries": [],
+    "saved_palettes": [],
     "brief_space": "", "brief_style": "Dreamy",
     "brief_mood": "", "brief_background": "White/Isolated",
     "template_selector": "— Choose a template —",
@@ -30,6 +31,20 @@ PAGE_TO_NAV = {"Brief":"Home","Search":"Search","Browse":"Browse","Palette":"Pal
 NAV_TO_PAGE = {"Home":"Brief","Search":"Search","Browse":"Browse","Palette":"Palette","Board":"Board","Prompt":"Prompt"}
 STYLE_OPTIONS = ["Dreamy", "Dark Moody", "Minimal", "Maximalist", "Realistic CGI"]
 BG_OPTIONS    = ["White/Isolated", "Scene", "Any"]
+
+# Streamlit 1.58 forbids setting widget-bound session keys after the widget renders.
+# The extract-brief flow stores results here, reruns, then this block pre-populates
+# the keys before any widget is instantiated.
+if "_brief_extracted" in st.session_state:
+    _ext = st.session_state.pop("_brief_extracted")
+    if _ext.get("space"):
+        st.session_state["brief_space"] = _ext["space"]
+    if _ext.get("style") and _ext["style"] in STYLE_OPTIONS:
+        st.session_state["brief_style"] = _ext["style"]
+    if _ext.get("mood"):
+        st.session_state["brief_mood"] = _ext["mood"]
+    if _ext.get("background") and _ext["background"] in BG_OPTIONS:
+        st.session_state["brief_background"] = _ext["background"]
 FILTER_SPACES = ["Living Room","Bedroom","Kitchen","Office","Courtyard","Exterior","Dining Room","Studio","Bathroom"]
 FILTER_STYLES = ["Dreamy","Minimal","Dark Moody","Maximalist","Brutalist","Japandi","Bohemian","Industrial","Coastal"]
 FILTER_MOODS  = ["Warm","Cool","Cozy","Editorial","Raw","Airy","Dramatic","Serene","Earthy","Luxe"]
@@ -247,7 +262,7 @@ def render_image_grid(images, key_prefix="img"):
         on_board   = any(x["thumb"] == img["thumb"] for x in st.session_state.selected_images)
         on_compare = any(x["thumb"] == img["thumb"] for x in st.session_state.comparison_images)
         with cols3[i % 3]:
-            st.image(img["thumb"], use_container_width=True)
+            st.image(img["thumb"], width="stretch")
             st.markdown(f'<span class="badge {bc}">{bl}</span> '
                         f'<a href="{img["link"]}" target="_blank" '
                         f'style="font-size:0.74rem;color:#3D5299;text-decoration:none;">'
@@ -681,6 +696,8 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
 .btn-g  { background:rgba(255,255,255,0.8); color:#0D1F8A !important; border-color:rgba(13,31,138,0.18); }
 .btn-a  { background:rgba(13,31,138,0.07); color:#0D1F8A !important; border-color:rgba(13,31,138,0.18); }
 .btn-r  { background:rgba(22,53,204,0.09); color:#1635CC !important; border-color:rgba(22,53,204,0.2); }
+.btn-f  { background:rgba(255,50,0,0.08);  color:#e63000 !important; border-color:rgba(255,50,0,0.2); }
+.btn-t  { background:rgba(0,168,120,0.08); color:#00956a !important; border-color:rgba(0,168,120,0.2); }
 
 /* ── Misc ── */
 .kw-tag { display:inline-block; padding:0.2rem 0.76rem; margin:0.14rem;
@@ -936,13 +953,7 @@ if page == "Brief":
                 with st.spinner("Reading brief with Claude AI..."):
                     extracted = extract_brief_from_file(file_bytes, mime)
                 if extracted:
-                    if extracted.get("space"): st.session_state.brief_space = extracted["space"]
-                    if extracted.get("style") and extracted["style"] in STYLE_OPTIONS:
-                        st.session_state.brief_style = extracted["style"]
-                    if extracted.get("mood"): st.session_state.brief_mood = extracted["mood"]
-                    if extracted.get("background") and extracted["background"] in BG_OPTIONS:
-                        st.session_state.brief_background = extracted["background"]
-                    st.success(f"Brief extracted: {extracted.get('space','')} · {extracted.get('style','')} · {extracted.get('mood','')}")
+                    st.session_state["_brief_extracted"] = extracted
                     st.rerun()
                 else:
                     st.warning("Could not extract brief — try a clearer image or PDF.")
@@ -969,9 +980,11 @@ if page == "Brief":
         n_b = len(st.session_state.selected_images)
         n_h = len(st.session_state.history)
         n_q = len(st.session_state.generated_queries)
+        n_p = len(st.session_state.saved_palettes)
         st.markdown(f"""
         <div class="zn-stats-grid">
           <div class="zn-stat"><div class="zn-stat-val">{n_b}</div><div class="zn-stat-lbl">Board</div></div>
+          <div class="zn-stat"><div class="zn-stat-val">{n_p}</div><div class="zn-stat-lbl">Palettes</div></div>
           <div class="zn-stat"><div class="zn-stat-val">{n_h}</div><div class="zn-stat-lbl">Briefs</div></div>
           <div class="zn-stat"><div class="zn-stat-val">{n_q}</div><div class="zn-stat-lbl">Queries</div></div>
         </div>""", unsafe_allow_html=True)
@@ -1012,6 +1025,15 @@ elif page == "Search":
                 '<h2 class="zn-page-title">Reference Queries</h2></div>', unsafe_allow_html=True)
 
     white_bg_only = st.checkbox("White / isolated backgrounds only (for Photoshop cutouts)", key="search_white_bg")
+
+    render_elem = st.checkbox("Render Elements mode — find plant, tree, people & furniture cutouts for compositing", key="search_render_elem")
+    elem_type = None
+    if render_elem:
+        elem_type = st.selectbox("Element type",
+            ["Plants & Vegetation", "Trees & Shrubs", "Wildflowers & Meadow Grasses",
+             "People / Scale Figures", "Furniture & Objects", "Vehicles & Bikes"],
+            key="search_elem_type", label_visibility="collapsed")
+
     if st.button("Generate Queries", type="primary"):
         _snap = st.session_state.get("_brief_snapshot", {})
         sp = st.session_state.brief_space or _snap.get("space", "")
@@ -1024,11 +1046,24 @@ elif page == "Search":
             brief = {"space":sp,"style":sty,"mood":mo,"background":bg}
             if not st.session_state.history or st.session_state.history[0] != brief:
                 st.session_state.history.insert(0,brief); st.session_state.history = st.session_state.history[:5]
-            bg_note = (" Prioritise queries that surface white-background or isolated-object shots suitable for Photoshop compositing."
-                       if white_bg_only else "")
-            prompt = (f"Generate 5 targeted search queries for a designer finding Photoshop render references. "
-                      f"Brief — Space: {sp}, Style: {sty}, Mood: {mo}, Background: {bg}.{bg_note} "
-                      f"Use designer vocabulary. Return numbered list only, no extra text.")
+            if render_elem and elem_type:
+                prompt = (
+                    f"Generate 5 highly specific search queries to find isolated Photoshop render entourage elements — "
+                    f"cutouts on white or transparent backgrounds for architectural compositing. "
+                    f"Element type: {elem_type}. Style context: {sty}, Mood: {mo}. "
+                    f"Each query MUST include at least one term from this list: "
+                    f"'PNG transparent background', 'isolated cutout', 'white background photoshop', "
+                    f"'architectural entourage', 'render element', 'cutout transparent', 'isolated on white'. "
+                    f"Use specific botanical, material, or design vocabulary (e.g. pampas grass, ornamental grass, "
+                    f"prairie wildflowers, mixed shrubbery, tall grasses). "
+                    f"Return numbered list only, no extra text."
+                )
+            else:
+                bg_note = (" Prioritise queries that surface white-background or isolated-object shots suitable for Photoshop compositing."
+                           if white_bg_only else "")
+                prompt = (f"Generate 5 targeted search queries for a designer finding Photoshop render references. "
+                          f"Brief — Space: {sp}, Style: {sty}, Mood: {mo}, Background: {bg}.{bg_note} "
+                          f"Use designer vocabulary. Return numbered list only, no extra text.")
             with st.spinner("Generating queries..."):
                 resp = client.messages.create(model="claude-haiku-4-5-20251001", max_tokens=512,
                     messages=[{"role":"user","content":prompt}])
@@ -1057,18 +1092,28 @@ elif page == "Search":
                     for p in previews[:3]) + "</div>"
             elif has_keys:
                 strip = '<div class="preview-strip">' + '<div class="preview-ph"></div>'*3 + "</div>"
+            if st.session_state.get("search_render_elem"):
+                src_buttons = (
+                    f'<a class="ref-btn btn-p" href="https://www.pinterest.com/search/pins/?q={enc}" target="_blank">Pinterest</a>'
+                    f'<a class="ref-btn btn-g" href="https://www.google.com/search?tbm=isch&q={enc}" target="_blank">Google Images</a>'
+                    f'<a class="ref-btn btn-f" href="https://www.freepik.com/search?query={enc}" target="_blank">Freepik</a>'
+                    f'<a class="ref-btn btn-t" href="https://pngtree.com/search?q={enc}" target="_blank">PNGTree</a>'
+                    f'<a class="ref-btn btn-b" href="https://www.behance.net/search/projects?search={enc}" target="_blank">Behance</a>'
+                )
+            else:
+                src_buttons = (
+                    f'<a class="ref-btn btn-p" href="https://www.pinterest.com/search/pins/?q={enc}" target="_blank">Pinterest</a>'
+                    f'<a class="ref-btn btn-b" href="https://www.behance.net/search/projects?search={enc}" target="_blank">Behance</a>'
+                    f'<a class="ref-btn btn-g" href="https://www.google.com/search?tbm=isch&q={enc}" target="_blank">Google Images</a>'
+                    f'<a class="ref-btn btn-a" href="https://archinect.com/search#/?q={enc}&type=photos" target="_blank">Archinect</a>'
+                    f'<a class="ref-btn btn-r" href="https://www.are.na/search/{enc}" target="_blank">Are.na</a>'
+                )
             st.markdown(f"""
             <div class="qcard">
               <div class="qcard-num">Query {i}</div>
               <div class="qcard-text">{qt}</div>
               {strip}
-              <div class="btn-row">
-                <a class="ref-btn btn-p" href="https://www.pinterest.com/search/pins/?q={enc}" target="_blank">Pinterest</a>
-                <a class="ref-btn btn-b" href="https://www.behance.net/search/projects?search={enc}" target="_blank">Behance</a>
-                <a class="ref-btn btn-g" href="https://www.google.com/search?tbm=isch&q={enc}" target="_blank">Google Images</a>
-                <a class="ref-btn btn-a" href="https://archinect.com/search#/?q={enc}&type=photos" target="_blank">Archinect</a>
-                <a class="ref-btn btn-r" href="https://www.are.na/search/{enc}" target="_blank">Are.na</a>
-              </div>
+              <div class="btn-row">{src_buttons}</div>
             </div>""", unsafe_allow_html=True)
         if not has_keys:
             st.info("Add **UNSPLASH_ACCESS_KEY** or **PEXELS_API_KEY** to secrets for image previews.")
@@ -1142,7 +1187,7 @@ elif page == "Browse":
             for col, img in zip([ca, cb], st.session_state.comparison_images):
                 with col:
                     st.caption(f"{img['source'].upper()} — {img['author']}")
-                    st.image(img["full"], use_container_width=True)
+                    st.image(img["full"], width="stretch")
             if st.button("Clear comparison"):
                 st.session_state.comparison_images = []; st.rerun()
     else:
@@ -1159,7 +1204,7 @@ elif page == "Palette":
 
     pal_tab1, pal_tab2, pal_tab3 = st.tabs(["Upload Image", "From URL", "From Board"])
 
-    def _show_palette(hexes, source_label=""):
+    def _show_palette(hexes, source_label="", key_suffix=""):
         if not hexes:
             st.warning("Could not extract palette — try a clearer image.")
             return
@@ -1171,26 +1216,39 @@ elif page == "Palette":
             "".join(f"<div class='swatch'><div class='swatch-block' style='background:{h}'></div>"
                      f"<div class='swatch-hex'>{h}</div></div>" for h in hexes) +
             "</div>", unsafe_allow_html=True)
-        c1, c2, _ = st.columns([1,1,3])
+        c1, c2, c3, _ = st.columns([1, 1, 1.3, 0.7])
         with c1:
             st.download_button("Download CSV", ",".join(hexes).encode(), "palette.csv", "text/csv",
-                               key="dl_pal_csv")
+                               key=f"dl_pal_csv{key_suffix}")
         with c2:
             aco = "\n".join(f"{h}" for h in hexes)
             st.download_button("Download TXT", aco.encode(), "palette.txt", "text/plain",
-                               key="dl_pal_txt")
+                               key=f"dl_pal_txt{key_suffix}")
+        with c3:
+            already = any(p["hexes"] == hexes for p in st.session_state.saved_palettes)
+            if st.button("✓ Saved" if already else "+ Save Palette",
+                         key=f"save_pal{key_suffix}", type="primary", use_container_width=True):
+                if not already:
+                    st.session_state.saved_palettes.append({
+                        "hexes": hexes,
+                        "label": source_label or "Custom palette",
+                    })
+                    st.rerun()
         st.success(f"Extracted {len(hexes)} colors.")
 
     with pal_tab1:
         pal_file = st.file_uploader("Upload image (JPG, PNG, WEBP)", type=["jpg","jpeg","png","webp"],
                                      label_visibility="collapsed", key="pal_upload")
         if pal_file:
-            file_bytes = pal_file.read()
-            st.session_state["_pal_bytes"] = file_bytes
-            st.session_state["_pal_name"] = pal_file.name
-            col_img, _ = st.columns([2, 3])
-            with col_img:
-                st.image(file_bytes, caption=pal_file.name, use_container_width=True)
+            try:
+                file_bytes = pal_file.read()
+                st.session_state["_pal_bytes"] = file_bytes
+                st.session_state["_pal_name"] = pal_file.name
+                col_img, _ = st.columns([2, 3])
+                with col_img:
+                    st.image(file_bytes, caption=pal_file.name, width="stretch")
+            except Exception as e:
+                st.warning(f"Could not preview image: {e}")
 
         if st.button("Extract Palette from Upload", type="primary", key="pal_upload_btn"):
             fb = st.session_state.get("_pal_bytes")
@@ -1200,7 +1258,10 @@ elif page == "Palette":
             else:
                 with st.spinner("Extracting..."):
                     hexes = extract_palette_from_bytes(fb, n=n_colors)
-                _show_palette(hexes, source_label=fn)
+                st.session_state["_pal_upload_result"] = {"hexes": hexes, "label": fn}
+        if st.session_state.get("_pal_upload_result"):
+            r = st.session_state["_pal_upload_result"]
+            _show_palette(r["hexes"], source_label=r["label"], key_suffix="_upload")
 
     with pal_tab2:
         palette_url = st.text_input("Paste a direct image URL (.jpg / .png)",
@@ -1212,7 +1273,10 @@ elif page == "Palette":
             else:
                 with st.spinner("Downloading & extracting..."):
                     hexes = extract_palette(palette_url.strip(), n=n_colors)
-                _show_palette(hexes, source_label=palette_url.strip()[:60]+"…")
+                st.session_state["_pal_url_result"] = {"hexes": hexes, "label": palette_url.strip()[:60]+"…"}
+        if st.session_state.get("_pal_url_result"):
+            r = st.session_state["_pal_url_result"]
+            _show_palette(r["hexes"], source_label=r["label"], key_suffix="_url")
 
     with pal_tab3:
         board_imgs = st.session_state.selected_images
@@ -1224,13 +1288,19 @@ elif page == "Palette":
             for i, img in enumerate(board_imgs):
                 c_img, c_btn = st.columns([2, 3])
                 with c_img:
-                    st.image(img["thumb"], use_container_width=True)
+                    st.image(img["thumb"], width="stretch")
                     st.caption(f"{img['source'].upper()} — {img['author']}")
                 with c_btn:
                     if st.button(f"Extract from image {i+1}", key=f"pal_board_{i}"):
                         with st.spinner("Extracting..."):
                             hexes = extract_palette(img["full"], n=n_colors)
-                        _show_palette(hexes, source_label=f"{img['source']} by {img['author']}")
+                        st.session_state[f"_pal_board_result_{i}"] = {
+                            "hexes": hexes,
+                            "label": f"{img['source']} by {img['author']}",
+                        }
+                    if st.session_state.get(f"_pal_board_result_{i}"):
+                        r = st.session_state[f"_pal_board_result_{i}"]
+                        _show_palette(r["hexes"], source_label=r["label"], key_suffix=f"_b{i}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: Board
@@ -1247,7 +1317,7 @@ elif page == "Board":
         prev_cols = st.columns(min(len(imgs), 4))
         for i, img in enumerate(imgs):
             with prev_cols[i % 4]:
-                st.image(img["thumb"], use_container_width=True)
+                st.image(img["thumb"], width="stretch")
                 if st.button("Remove", key=f"rm_{i}", use_container_width=True):
                     st.session_state.selected_images.pop(i); st.rerun()
         st.divider()
@@ -1269,6 +1339,44 @@ elif page == "Board":
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Clear All", use_container_width=True):
                 st.session_state.selected_images = []; st.rerun()
+
+    st.divider()
+    st.markdown('<div class="zn-card-label">SAVED PALETTES</div>', unsafe_allow_html=True)
+    saved_pals = st.session_state.saved_palettes
+    if not saved_pals:
+        st.info("Extract a palette on the **Palette** page and click **+ Save Palette** to collect it here.")
+    else:
+        st.markdown(f"<p style='color:#3D5299;font-size:0.82rem;margin-bottom:1rem'>"
+                    f"{len(saved_pals)} palette(s) saved</p>", unsafe_allow_html=True)
+        for pi, pal in enumerate(saved_pals):
+            with st.container():
+                pc1, pc2 = st.columns([6, 1])
+                with pc1:
+                    if pal.get("label"):
+                        st.markdown(f"<div style='font-size:0.72rem;color:#3D5299;margin-bottom:0.35rem'>"
+                                    f"{pal['label']}</div>", unsafe_allow_html=True)
+                    st.markdown(
+                        "<div class='swatch-row' style='margin:0 0 0.6rem'>" +
+                        "".join(
+                            f"<div class='swatch'>"
+                            f"<div class='swatch-block' style='background:{h}'></div>"
+                            f"<div class='swatch-hex'>{h}</div></div>"
+                            for h in pal["hexes"]
+                        ) + "</div>", unsafe_allow_html=True)
+                    st.download_button(
+                        "Download CSV",
+                        ",".join(pal["hexes"]).encode(),
+                        f"palette_{pi+1}.csv", "text/csv",
+                        key=f"dl_saved_pal_{pi}",
+                    )
+                with pc2:
+                    st.markdown("<br><br>", unsafe_allow_html=True)
+                    if st.button("Remove", key=f"rm_pal_{pi}", use_container_width=True):
+                        st.session_state.saved_palettes.pop(pi); st.rerun()
+            st.markdown("<hr style='border-color:rgba(13,31,138,0.07);margin:0.6rem 0'>",
+                        unsafe_allow_html=True)
+        if st.button("Clear All Palettes", key="clear_all_pals"):
+            st.session_state.saved_palettes = []; st.rerun()
 
     st.divider()
     st.markdown('<div class="zn-card-label">PIN FROM PINTEREST</div>', unsafe_allow_html=True)
