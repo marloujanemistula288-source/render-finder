@@ -3,9 +3,10 @@
   "configurations": [
     {
       "name": "streamlit-app",
-      "runtimeExecutable": "streamlit",
-      "runtimeArgs": ["run", "app.py", "--server.port", "8501", "--server.headless", "true"],
-      "port": 8501
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "streamlit", "run", "app.py", "--server.headless", "true"],
+      "port": 8501,
+      "autoPort": true
     }
   ]
 }
