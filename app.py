@@ -170,6 +170,23 @@ def extract_palette_from_bytes(file_bytes, n=6):
     except:
         return []
 
+def fetch_pinterest_image(url):
+    """Extract image from a Pinterest pin URL, pinimg.com CDN URL, or any direct image URL."""
+    url = url.strip()
+    if re.search(r'\.(jpg|jpeg|png|webp)(\?[^#]*)?$', url, re.I) or 'pinimg.com' in url:
+        return {"thumb": url, "full": url, "link": url, "author": "Pinterest", "source": "pinterest"}
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+        r = requests.get(url, timeout=12, headers=headers)
+        match = (re.search(r'property="og:image"\s+content="([^"]+)"', r.text) or
+                 re.search(r'content="([^"]+)"\s+property="og:image"', r.text))
+        if match:
+            img = match.group(1)
+            return {"thumb": img, "full": img, "link": url, "author": "Pinterest", "source": "pinterest"}
+    except:
+        pass
+    return None
+
 def send_board_email(to_email, images):
     smtp_host = get_secret("SMTP_HOST")
     smtp_user = get_secret("SMTP_USER")
@@ -221,7 +238,6 @@ def on_template_change():
         st.session_state.brief_style      = t["style"]
         st.session_state.brief_mood       = t["mood"]
         st.session_state.brief_background = t["background"]
-        st.session_state.template_selector = "— Choose a template —"
 
 def render_image_grid(images, key_prefix="img"):
     cols3 = st.columns(3)
@@ -460,10 +476,10 @@ button[data-testid="stBaseButton-segmented_controlActive"] {
 }
 .fp-pill {
     display: block; text-align: center; position: relative; z-index: 20;
-    background: rgba(255,255,255,0.12);
-    backdrop-filter: blur(18px) brightness(0.40) saturate(0.75);
-    -webkit-backdrop-filter: blur(18px) brightness(0.40) saturate(0.75);
-    border: 1.5px solid rgba(255,255,255,0.50);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
     border-radius: 50px;
     color: #FFFFFF !important;
     font-family: inherit; font-size: 0.92rem; font-weight: 500;
@@ -473,27 +489,111 @@ button[data-testid="stBaseButton-segmented_controlActive"] {
     transition: all 0.2s; cursor: pointer;
 }
 .fp-pill:hover {
-    background: rgba(255,255,255,0.22);
+    background: rgba(255, 255, 255, 0.25);
     transform: translateY(-2px);
     box-shadow: 0 12px 44px rgba(0,0,40,0.32), inset 0 1px 0 rgba(255,255,255,0.45);
     color: #FFFFFF !important; text-decoration: none;
 }
 
 /* ── Inputs ── */
-input, textarea, [data-testid="stTextInput"] input {
-    background: rgba(255,255,255,0.88) !important;
-    border: 1.5px solid rgba(13,31,138,0.16) !important;
-    border-radius: 12px !important; color: #0D1F8A !important;
+input, textarea,
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea {
+    background: #ffffff !important;
+    border: 1.5px solid rgba(100, 120, 220, 0.3) !important;
+    border-radius: 8px !important;
+    color: #1a1a6e !important;
+    padding: 10px 14px !important;
     font-family: 'Inter', sans-serif !important;
 }
-input:focus, textarea:focus {
-    border-color: #0D1F8A !important;
-    box-shadow: 0 0 0 3px rgba(13,31,138,0.1) !important;
+input::placeholder, textarea::placeholder,
+[data-testid="stTextInput"] input::placeholder,
+[data-testid="stTextArea"] textarea::placeholder {
+    color: rgba(100, 120, 220, 0.5) !important;
+    opacity: 1 !important;
 }
-[data-testid="stSelectbox"] > div > div {
-    background: rgba(255,255,255,0.88) !important;
-    border: 1.5px solid rgba(13,31,138,0.16) !important;
-    border-radius: 12px !important; color: #0D1F8A !important;
+input:focus, textarea:focus {
+    border-color: rgba(100, 120, 220, 0.3) !important;
+    box-shadow: 0 0 0 3px rgba(100, 120, 220, 0.08) !important;
+}
+[data-testid="stSelectbox"] > div > div,
+[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+    background: #ffffff !important;
+    border: 1.5px solid rgba(100, 120, 220, 0.3) !important;
+    border-radius: 8px !important;
+    color: #1a1a6e !important;
+    position: relative !important;
+}
+/* Chevron arrow indicator via ::after on the outer control box */
+[data-testid="stSelectbox"] [data-baseweb="select"] > div::after {
+    content: '▾';
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(100, 120, 220, 0.6);
+    font-size: 1.1rem;
+    pointer-events: none;
+    line-height: 1;
+}
+/* Inner children: no border (prevents border-left divider) */
+[data-testid="stSelectbox"] [data-baseweb="select"] > div > div {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+}
+/* Hide the BaseWeb icons container (35px with SVG arrow) */
+[data-testid="stSelectbox"] [data-baseweb="select"] > div > div:last-child {
+    display: none !important;
+}
+/* Neutralise the hidden combobox input that renders as a grey square */
+[data-testid="stSelectbox"] input[role="combobox"] {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    color: transparent !important;
+    width: 1px !important;
+}
+[data-testid="stSelectbox"] [data-baseweb="select"] span {
+    color: #1a1a6e !important;
+}
+/* ── Selectbox dropdown portal (BaseWeb popover rendered at body level) ── */
+[data-baseweb="popover"],
+[data-baseweb="popover"] > div,
+[data-baseweb="popover"] ul {
+    background: #0D1F8A !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 8px 32px rgba(0,0,40,0.4) !important;
+}
+[data-baseweb="popover"] [role="option"] {
+    background: transparent !important;
+    color: rgba(255,255,255,0.9) !important;
+}
+[data-baseweb="popover"] [role="option"]:hover,
+[data-baseweb="popover"] [role="option"][aria-selected="true"] {
+    background: rgba(255,255,255,0.1) !important;
+    color: #ffffff !important;
+}
+/* ── File uploader drop zone ── */
+[data-testid="stFileUploaderDropzone"] {
+    background: rgba(20, 30, 120, 0.6) !important;
+    border: 1.5px dashed rgba(255,255,255,0.35) !important;
+    border-radius: 12px !important;
+}
+[data-testid="stFileUploaderDropzone"] span,
+[data-testid="stFileUploaderDropzone"] small,
+[data-testid="stFileUploaderDropzone"] p {
+    color: rgba(255,255,255,0.85) !important;
+}
+[data-testid="stFileUploaderDropzone"] button {
+    color: rgba(255,255,255,0.85) !important;
+    border-color: rgba(255,255,255,0.4) !important;
+    background: rgba(255,255,255,0.1) !important;
+    border-radius: 8px !important;
 }
 label { color: #3D5299 !important; font-size: 0.8rem !important; }
 
@@ -589,8 +689,9 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
           font-family:'Inter',sans-serif; font-weight:500; }
 .badge  { display:inline-block; padding:0.1rem 0.46rem; border-radius:20px;
           font-size:0.64rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; }
-.badge-unsplash { background:rgba(13,31,138,0.09); color:#0D1F8A; }
-.badge-pexels   { background:rgba(22,53,204,0.12); color:#1635CC; }
+.badge-unsplash  { background:rgba(13,31,138,0.09); color:#0D1F8A; }
+.badge-pexels    { background:rgba(22,53,204,0.12); color:#1635CC; }
+.badge-pinterest { background:rgba(230,0,35,0.09);  color:#cc0020; }
 .filter-lbl { font-size:0.68rem; letter-spacing:0.12em; text-transform:uppercase;
               color:#3D5299; font-weight:600; margin:0.9rem 0 0.3rem; }
 .swatch-row { display:flex; gap:0.85rem; flex-wrap:wrap; margin:1rem 0; }
@@ -604,9 +705,12 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
               font-family:monospace; line-height:1.72; white-space:pre-wrap; }
 .stSuccess { background:rgba(13,31,138,0.06) !important; color:#0D1F8A !important;
              border-left:4px solid #1635CC !important; border-radius:12px !important; }
-.stInfo    { background:rgba(255,255,255,0.6) !important; color:#3D5299 !important;
+.stInfo    { background:rgba(255,255,255,0.6) !important; color:#9099c4 !important;
              border-left:4px solid rgba(13,31,138,0.3) !important; border-radius:12px !important; }
-.stWarning { background:rgba(255,195,0,0.1) !important; border-radius:12px !important; }
+.stInfo p, .stInfo [data-testid="stMarkdownContainer"] p { color:#9099c4 !important; }
+.stWarning { background:rgba(100,120,220,0.1) !important;
+             border:1px solid rgba(100,120,220,0.2) !important; border-radius:12px !important; }
+.stWarning p, .stWarning [data-testid="stMarkdownContainer"] p { color:#9099c4 !important; }
 hr { border-color:rgba(13,31,138,0.09) !important; }
 
 /* ── Stay Connected card ── */
@@ -617,6 +721,110 @@ hr { border-color:rgba(13,31,138,0.09) !important; }
 .sc-body {
     font-size: 0.78rem; color: #3D5299; line-height: 1.5; margin-bottom: 0.85rem;
     font-family: 'Inter', sans-serif;
+}
+
+/* ── Browse filter pills ── */
+button[data-testid="stBaseButton-pills"] {
+    background: #ffffff !important;
+    border: 1.5px solid rgba(100, 120, 220, 0.35) !important;
+    color: #1a1a6e !important;
+    border-radius: 9999px !important;
+    transition: all 0.15s !important;
+}
+button[data-testid="stBaseButton-pills"]:hover {
+    background: rgba(100, 120, 220, 0.08) !important;
+    border-color: rgba(100, 120, 220, 0.6) !important;
+    color: #1a1a6e !important;
+}
+button[data-testid="stBaseButton-pillsActive"] {
+    background: #1a1a6e !important;
+    border: 1.5px solid #1a1a6e !important;
+    color: #ffffff !important;
+    border-radius: 9999px !important;
+    transition: all 0.15s !important;
+}
+button[data-testid="stBaseButton-pillsActive"]:hover {
+    background: #2a2a8e !important;
+    border-color: #2a2a8e !important;
+    color: #ffffff !important;
+}
+
+/* ── Tabs (Palette page) ── */
+button[data-testid="stTab"] {
+    color: #9099c4 !important;
+}
+button[data-testid="stTab"] p {
+    color: #9099c4 !important;
+}
+button[data-testid="stTab"]:hover {
+    color: #e8541a !important;
+}
+button[data-testid="stTab"]:hover p {
+    color: #e8541a !important;
+}
+button[data-testid="stTab"][aria-selected="true"] {
+    color: #1a1a6e !important;
+}
+button[data-testid="stTab"][aria-selected="true"] p {
+    color: #1a1a6e !important;
+}
+/* Active tab underline (sliding indicator div inside tablist) */
+[role="tablist"] > [role="presentation"] {
+    background-color: #1a1a6e !important;
+}
+/* Tab bar separator line */
+[data-testid="stTabs"] [role="presentation"]:not([role="tablist"] > [role="presentation"]) {
+    background-color: rgba(100, 120, 220, 0.2) !important;
+}
+
+/* ── Checkbox labels ── */
+[data-testid="stCheckbox"] label p,
+[data-testid="stCheckbox"] label span {
+    color: #9099c4 !important;
+}
+[data-testid="stCheckbox"] label:has(input:checked) p,
+[data-testid="stCheckbox"] label:has(input:checked) span {
+    color: #1a1a6e !important;
+}
+
+/* ── Expander header ── */
+[data-testid="stExpander"] summary,
+[data-testid="stExpander"] summary p,
+[data-testid="stExpander"] summary span {
+    color: #9099c4 !important;
+}
+[data-testid="stExpander"] summary:hover,
+[data-testid="stExpander"] summary:hover p,
+[data-testid="stExpander"] summary:hover span {
+    color: #1a1a6e !important;
+}
+
+/* ── Radio buttons (Prompt page) ── */
+[data-testid="stRadio"] > label,
+[data-testid="stRadio"] > div > label {
+    color: #9099c4 !important;
+}
+[data-testid="stRadio"] [role="radiogroup"] label > div:last-child,
+[data-testid="stRadio"] [role="radiogroup"] label [data-testid="stMarkdownContainer"] p {
+    color: #9099c4 !important;
+}
+[data-testid="stRadio"] [role="radiogroup"] label:hover > div:last-child,
+[data-testid="stRadio"] [role="radiogroup"] label:hover [data-testid="stMarkdownContainer"] p {
+    color: #e8541a !important;
+}
+[data-testid="stRadio"] [role="radiogroup"] label:has(input:checked) > div:last-child,
+[data-testid="stRadio"] [role="radiogroup"] label:has(input:checked) [data-testid="stMarkdownContainer"] p {
+    color: #1a1a6e !important;
+}
+/* Radio indicator dot — unselected */
+[data-testid="stRadio"] [role="radiogroup"] label > div:first-child {
+    background-color: rgba(100, 120, 220, 0.12) !important;
+    border: 2px solid rgba(100, 120, 220, 0.4) !important;
+}
+/* Radio indicator dot — selected: navy instead of Streamlit red */
+[data-testid="stRadio"] [role="radiogroup"] label:has(input:checked) > div:first-child {
+    background-color: #1a1a6e !important;
+    border-color: #1a1a6e !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -803,6 +1011,7 @@ elif page == "Search":
     st.markdown('<div class="zn-page-header"><div class="zn-badge-small">● AI-GENERATED</div>'
                 '<h2 class="zn-page-title">Reference Queries</h2></div>', unsafe_allow_html=True)
 
+    white_bg_only = st.checkbox("White / isolated backgrounds only (for Photoshop cutouts)", key="search_white_bg")
     if st.button("Generate Queries", type="primary"):
         _snap = st.session_state.get("_brief_snapshot", {})
         sp = st.session_state.brief_space or _snap.get("space", "")
@@ -815,8 +1024,10 @@ elif page == "Search":
             brief = {"space":sp,"style":sty,"mood":mo,"background":bg}
             if not st.session_state.history or st.session_state.history[0] != brief:
                 st.session_state.history.insert(0,brief); st.session_state.history = st.session_state.history[:5]
+            bg_note = (" Prioritise queries that surface white-background or isolated-object shots suitable for Photoshop compositing."
+                       if white_bg_only else "")
             prompt = (f"Generate 5 targeted search queries for a designer finding Photoshop render references. "
-                      f"Brief — Space: {sp}, Style: {sty}, Mood: {mo}, Background: {bg}. "
+                      f"Brief — Space: {sp}, Style: {sty}, Mood: {mo}, Background: {bg}.{bg_note} "
                       f"Use designer vocabulary. Return numbered list only, no extra text.")
             with st.spinner("Generating queries..."):
                 resp = client.messages.create(model="claude-haiku-4-5-20251001", max_tokens=512,
@@ -836,8 +1047,9 @@ elif page == "Search":
             enc = urllib.parse.quote_plus(qt)
             previews = []
             if has_keys:
-                previews = search_unsplash(qt, n=3)
-                if len(previews) < 3: previews += search_pexels(qt, n=3-len(previews))
+                wb = " white background isolated" if st.session_state.get("search_white_bg") else ""
+                previews = search_unsplash(qt + wb, n=3)
+                if len(previews) < 3: previews += search_pexels(qt + wb, n=3-len(previews))
             strip = ""
             if previews:
                 strip = '<div class="preview-strip">' + "".join(
@@ -879,25 +1091,29 @@ elif page == "Browse":
     sel_moods  = st.pills("moods",  FILTER_MOODS,  selection_mode="multi", label_visibility="collapsed")
     st.markdown("<div class='filter-lbl'>Lighting</div>", unsafe_allow_html=True)
     sel_lights = st.pills("lights", FILTER_LIGHTS, selection_mode="multi", label_visibility="collapsed")
+    st.markdown("<div class='filter-lbl'>Background</div>", unsafe_allow_html=True)
+    sel_bg = st.pills("background", ["White/Isolated"], selection_mode="single", label_visibility="collapsed")
 
     st.markdown("<br>", unsafe_allow_html=True)
+    bg_suffix = " white background isolated product photography" if sel_bg == "White/Isolated" else ""
     fa, fb = st.columns([2, 5])
     with fa:
         filter_btn = st.button("Browse Images", type="primary", use_container_width=True)
     with fb:
         tags = list(sel_spaces or []) + list(sel_styles or []) + list(sel_moods or []) + list(sel_lights or [])
-        if tags:
+        display_tags = tags + (["White/Isolated"] if sel_bg == "White/Isolated" else [])
+        if display_tags:
             st.markdown(f"<div style='padding-top:0.55rem;color:#1635CC;font-size:0.82rem;'>"
-                        f"Query: <em>{', '.join(tags)}</em></div>", unsafe_allow_html=True)
+                        f"Query: <em>{', '.join(display_tags)}</em></div>", unsafe_allow_html=True)
 
     if filter_btn:
         tags = list(sel_spaces or []) + list(sel_styles or []) + list(sel_moods or []) + list(sel_lights or [])
-        if not tags:
+        if not tags and not sel_bg:
             st.warning("Select at least one filter.")
         elif not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
             st.warning("Add image API keys to Streamlit secrets.")
         else:
-            q = " ".join(tags) + " interior architecture"
+            q = " ".join(tags) + bg_suffix + " interior architecture"
             with st.spinner("Fetching images..."):
                 st.session_state.filter_results = search_unsplash(q, n=9) + search_pexels(q, n=9)
 
@@ -909,7 +1125,8 @@ elif page == "Browse":
             elif not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
                 st.warning("Add image API keys to Streamlit secrets.")
             else:
-                q = f"{st.session_state.brief_style} {sp} {mo} interior architecture"
+                brief_bg_suffix = " white background isolated product photography" if st.session_state.brief_background == "White/Isolated" else ""
+                q = f"{st.session_state.brief_style} {sp} {mo}{brief_bg_suffix} interior architecture"
                 with st.spinner("Fetching images..."):
                     st.session_state.browse_results = search_unsplash(q, n=9) + search_pexels(q, n=9)
 
@@ -938,9 +1155,9 @@ elif page == "Palette":
     st.markdown('<div class="zn-page-header"><div class="zn-badge-small">● COLOR EXTRACTION</div>'
                 '<h2 class="zn-page-title">Palette Extractor</h2></div>', unsafe_allow_html=True)
 
-    pal_tab1, pal_tab2, pal_tab3 = st.tabs(["Upload Image", "From URL", "From Board"])
-
     n_colors = st.slider("Number of colors", 3, 10, 6)
+
+    pal_tab1, pal_tab2, pal_tab3 = st.tabs(["Upload Image", "From URL", "From Board"])
 
     def _show_palette(hexes, source_label=""):
         if not hexes:
@@ -969,13 +1186,21 @@ elif page == "Palette":
                                      label_visibility="collapsed", key="pal_upload")
         if pal_file:
             file_bytes = pal_file.read()
+            st.session_state["_pal_bytes"] = file_bytes
+            st.session_state["_pal_name"] = pal_file.name
             col_img, _ = st.columns([2, 3])
             with col_img:
                 st.image(file_bytes, caption=pal_file.name, use_container_width=True)
-            if st.button("Extract Palette from Upload", type="primary", key="pal_upload_btn"):
+
+        if st.button("Extract Palette from Upload", type="primary", key="pal_upload_btn"):
+            fb = st.session_state.get("_pal_bytes")
+            fn = st.session_state.get("_pal_name", "uploaded image")
+            if not fb:
+                st.warning("Upload an image first.")
+            else:
                 with st.spinner("Extracting..."):
-                    hexes = extract_palette_from_bytes(file_bytes, n=n_colors)
-                _show_palette(hexes, source_label=pal_file.name)
+                    hexes = extract_palette_from_bytes(fb, n=n_colors)
+                _show_palette(hexes, source_label=fn)
 
     with pal_tab2:
         palette_url = st.text_input("Paste a direct image URL (.jpg / .png)",
@@ -1045,6 +1270,34 @@ elif page == "Board":
             if st.button("Clear All", use_container_width=True):
                 st.session_state.selected_images = []; st.rerun()
 
+    st.divider()
+    st.markdown('<div class="zn-card-label">PIN FROM PINTEREST</div>', unsafe_allow_html=True)
+    st.markdown("<p style='font-size:0.8rem;color:#9099c4;margin-bottom:0.8rem'>"
+                "Paste a Pinterest pin URL or copy the image URL directly from Pinterest to add it to your board.</p>",
+                unsafe_allow_html=True)
+    pa, pb = st.columns([5, 1.4])
+    with pa:
+        pin_input = st.text_input("Pinterest URL",
+                                   placeholder="https://www.pinterest.com/pin/… or paste image URL",
+                                   key="pin_url_input", label_visibility="collapsed")
+    with pb:
+        pin_btn = st.button("Add to Board", type="primary", key="pin_add_btn", use_container_width=True)
+    if pin_btn:
+        if not pin_input.strip():
+            st.warning("Paste a Pinterest pin URL or image URL first.")
+        else:
+            with st.spinner("Fetching pin..."):
+                pin_data = fetch_pinterest_image(pin_input.strip())
+            if pin_data:
+                if any(x.get("link") == pin_data["link"] for x in st.session_state.selected_images):
+                    st.info("This pin is already on your board.")
+                else:
+                    st.session_state.selected_images.append(pin_data)
+                    st.success("Pin added to board!")
+                    st.rerun()
+            else:
+                st.warning("Could not fetch image. On Pinterest, right-click the image → Copy image address, then paste that URL here.")
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: Prompt
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1057,6 +1310,11 @@ elif page == "Prompt":
     p_style = st.session_state.brief_style
     p_mood  = st.session_state.brief_mood  or ""
     p_bg    = st.session_state.brief_background
+
+    brief_parts = [x for x in [p_space, p_style, p_mood] if x]
+    if brief_parts:
+        st.markdown(f"<p style='font-size:0.8rem;color:#9099c4;margin:0.3rem 0 0.8rem'>"
+                    f"Brief: {' · '.join(brief_parts)}</p>", unsafe_allow_html=True)
 
     with st.expander("Override brief for this prompt"):
         oc1, oc2 = st.columns(2)
