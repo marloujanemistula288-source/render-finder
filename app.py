@@ -1247,7 +1247,10 @@ elif page == "Palette":
             else:
                 with st.spinner("Extracting..."):
                     hexes = extract_palette_from_bytes(fb, n=n_colors)
-                _show_palette(hexes, source_label=fn, key_suffix="_upload")
+                st.session_state["_pal_upload_result"] = {"hexes": hexes, "label": fn}
+        if st.session_state.get("_pal_upload_result"):
+            r = st.session_state["_pal_upload_result"]
+            _show_palette(r["hexes"], source_label=r["label"], key_suffix="_upload")
 
     with pal_tab2:
         palette_url = st.text_input("Paste a direct image URL (.jpg / .png)",
@@ -1259,7 +1262,10 @@ elif page == "Palette":
             else:
                 with st.spinner("Downloading & extracting..."):
                     hexes = extract_palette(palette_url.strip(), n=n_colors)
-                _show_palette(hexes, source_label=palette_url.strip()[:60]+"…", key_suffix="_url")
+                st.session_state["_pal_url_result"] = {"hexes": hexes, "label": palette_url.strip()[:60]+"…"}
+        if st.session_state.get("_pal_url_result"):
+            r = st.session_state["_pal_url_result"]
+            _show_palette(r["hexes"], source_label=r["label"], key_suffix="_url")
 
     with pal_tab3:
         board_imgs = st.session_state.selected_images
@@ -1277,7 +1283,13 @@ elif page == "Palette":
                     if st.button(f"Extract from image {i+1}", key=f"pal_board_{i}"):
                         with st.spinner("Extracting..."):
                             hexes = extract_palette(img["full"], n=n_colors)
-                        _show_palette(hexes, source_label=f"{img['source']} by {img['author']}", key_suffix=f"_b{i}")
+                        st.session_state[f"_pal_board_result_{i}"] = {
+                            "hexes": hexes,
+                            "label": f"{img['source']} by {img['author']}",
+                        }
+                    if st.session_state.get(f"_pal_board_result_{i}"):
+                        r = st.session_state[f"_pal_board_result_{i}"]
+                        _show_palette(r["hexes"], source_label=r["label"], key_suffix=f"_b{i}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: Board
