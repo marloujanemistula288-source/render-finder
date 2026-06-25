@@ -1001,17 +1001,28 @@ if page == "Brief":
         <div class="sc-title">STAY CONNECTED</div>
         <div class="sc-body">Forward your curated board references straight to your inbox.</div>
         """, unsafe_allow_html=True)
-        board_email = st.text_input("Email", placeholder="you@studio.com",
+     board_email = st.text_input("Email", placeholder="you@studio.com",
                             key="board_email_input", label_visibility="collapsed")
 if st.button("Send Board →", key="send_board_btn", type="primary", use_container_width=True):
     _email = st.session_state.get("board_email_input", "").strip()
     _imgs  = st.session_state.get("selected_images", [])
+    st.write(f"DEBUG email: '{_email}'")
+    st.write(f"DEBUG images: {len(_imgs)}")
+    st.write(f"DEBUG smtp host: {get_secret('SMTP_HOST')}")
     if not _email or "@" not in _email:
         st.warning("Enter a valid email address.")
     elif not _imgs:
         st.warning("Add images to your Board first.")
     else:
         sent, msg = send_board_email(_email, _imgs)
+        st.write(f"DEBUG sent: {sent}, msg: {msg}")
+        if sent:
+            st.success(f"Board sent to {_email}!")
+        elif msg == "no_smtp":
+            links = "\n".join(img["link"] for img in _imgs)
+            st.text_area("Copy these links:", links, height=90, key="board_links_out")
+        else:
+            st.error(f"Email error: {msg}")
                 if sent:
                     st.success(f"Board sent to {board_email}!")
                 elif msg == "no_smtp":
