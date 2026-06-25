@@ -15,6 +15,7 @@ st.set_page_config(page_title="Render Finder", layout="wide", initial_sidebar_st
 _defaults = {
     "history": [], "selected_images": [], "comparison_images": [],
     "browse_results": [], "filter_results": [], "generated_queries": [],
+    "saved_palettes": [],
     "brief_space": "", "brief_style": "Dreamy",
     "brief_mood": "", "brief_background": "White/Isolated",
     "template_selector": "— Choose a template —",
@@ -971,9 +972,11 @@ if page == "Brief":
         n_b = len(st.session_state.selected_images)
         n_h = len(st.session_state.history)
         n_q = len(st.session_state.generated_queries)
+        n_p = len(st.session_state.saved_palettes)
         st.markdown(f"""
         <div class="zn-stats-grid">
           <div class="zn-stat"><div class="zn-stat-val">{n_b}</div><div class="zn-stat-lbl">Board</div></div>
+          <div class="zn-stat"><div class="zn-stat-val">{n_p}</div><div class="zn-stat-lbl">Palettes</div></div>
           <div class="zn-stat"><div class="zn-stat-val">{n_h}</div><div class="zn-stat-lbl">Briefs</div></div>
           <div class="zn-stat"><div class="zn-stat-val">{n_q}</div><div class="zn-stat-lbl">Queries</div></div>
         </div>""", unsafe_allow_html=True)
@@ -1193,7 +1196,7 @@ elif page == "Palette":
 
     pal_tab1, pal_tab2, pal_tab3 = st.tabs(["Upload Image", "From URL", "From Board"])
 
-    def _show_palette(hexes, source_label=""):
+    def _show_palette(hexes, source_label="", key_suffix=""):
         if not hexes:
             st.warning("Could not extract palette — try a clearer image.")
             return
@@ -1205,14 +1208,24 @@ elif page == "Palette":
             "".join(f"<div class='swatch'><div class='swatch-block' style='background:{h}'></div>"
                      f"<div class='swatch-hex'>{h}</div></div>" for h in hexes) +
             "</div>", unsafe_allow_html=True)
-        c1, c2, _ = st.columns([1,1,3])
+        c1, c2, c3, _ = st.columns([1, 1, 1.3, 0.7])
         with c1:
             st.download_button("Download CSV", ",".join(hexes).encode(), "palette.csv", "text/csv",
-                               key="dl_pal_csv")
+                               key=f"dl_pal_csv{key_suffix}")
         with c2:
             aco = "\n".join(f"{h}" for h in hexes)
             st.download_button("Download TXT", aco.encode(), "palette.txt", "text/plain",
-                               key="dl_pal_txt")
+                               key=f"dl_pal_txt{key_suffix}")
+        with c3:
+            already = any(p["hexes"] == hexes for p in st.session_state.saved_palettes)
+            if st.button("✓ Saved" if already else "+ Save Palette",
+                         key=f"save_pal{key_suffix}", type="primary", use_container_width=True):
+                if not already:
+                    st.session_state.saved_palettes.append({
+                        "hexes": hexes,
+                        "label": source_label or "Custom palette",
+                    })
+                    st.rerun()
         st.success(f"Extracted {len(hexes)} colors.")
 
     with pal_tab1:
@@ -1234,7 +1247,7 @@ elif page == "Palette":
             else:
                 with st.spinner("Extracting..."):
                     hexes = extract_palette_from_bytes(fb, n=n_colors)
-                _show_palette(hexes, source_label=fn)
+                _show_palette(hexes, source_label=fn, key_suffix="_upload")
 
     with pal_tab2:
         palette_url = st.text_input("Paste a direct image URL (.jpg / .png)",
@@ -1246,7 +1259,7 @@ elif page == "Palette":
             else:
                 with st.spinner("Downloading & extracting..."):
                     hexes = extract_palette(palette_url.strip(), n=n_colors)
-                _show_palette(hexes, source_label=palette_url.strip()[:60]+"…")
+                _show_palette(hexes, source_label=palette_url.strip()[:60]+"…", key_suffix="_url")
 
     with pal_tab3:
         board_imgs = st.session_state.selected_images
@@ -1264,7 +1277,7 @@ elif page == "Palette":
                     if st.button(f"Extract from image {i+1}", key=f"pal_board_{i}"):
                         with st.spinner("Extracting..."):
                             hexes = extract_palette(img["full"], n=n_colors)
-                        _show_palette(hexes, source_label=f"{img['source']} by {img['author']}")
+                        _show_palette(hexes, source_label=f"{img['source']} by {img['author']}", key_suffix=f"_b{i}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: Board
@@ -1303,6 +1316,44 @@ elif page == "Board":
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Clear All", use_container_width=True):
                 st.session_state.selected_images = []; st.rerun()
+
+    st.divider()
+    st.markdown('<div class="zn-card-label">SAVED PALETTES</div>', unsafe_allow_html=True)
+    saved_pals = st.session_state.saved_palettes
+    if not saved_pals:
+        st.info("Extract a palette on the **Palette** page and click **+ Save Palette** to collect it here.")
+    else:
+        st.markdown(f"<p style='color:#3D5299;font-size:0.82rem;margin-bottom:1rem'>"
+                    f"{len(saved_pals)} palette(s) saved</p>", unsafe_allow_html=True)
+        for pi, pal in enumerate(saved_pals):
+            with st.container():
+                pc1, pc2 = st.columns([6, 1])
+                with pc1:
+                    if pal.get("label"):
+                        st.markdown(f"<div style='font-size:0.72rem;color:#3D5299;margin-bottom:0.35rem'>"
+                                    f"{pal['label']}</div>", unsafe_allow_html=True)
+                    st.markdown(
+                        "<div class='swatch-row' style='margin:0 0 0.6rem'>" +
+                        "".join(
+                            f"<div class='swatch'>"
+                            f"<div class='swatch-block' style='background:{h}'></div>"
+                            f"<div class='swatch-hex'>{h}</div></div>"
+                            for h in pal["hexes"]
+                        ) + "</div>", unsafe_allow_html=True)
+                    st.download_button(
+                        "Download CSV",
+                        ",".join(pal["hexes"]).encode(),
+                        f"palette_{pi+1}.csv", "text/csv",
+                        key=f"dl_saved_pal_{pi}",
+                    )
+                with pc2:
+                    st.markdown("<br><br>", unsafe_allow_html=True)
+                    if st.button("Remove", key=f"rm_pal_{pi}", use_container_width=True):
+                        st.session_state.saved_palettes.pop(pi); st.rerun()
+            st.markdown("<hr style='border-color:rgba(13,31,138,0.07);margin:0.6rem 0'>",
+                        unsafe_allow_html=True)
+        if st.button("Clear All Palettes", key="clear_all_pals"):
+            st.session_state.saved_palettes = []; st.rerun()
 
     st.divider()
     st.markdown('<div class="zn-card-label">PIN FROM PINTEREST</div>', unsafe_allow_html=True)
