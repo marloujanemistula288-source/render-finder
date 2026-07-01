@@ -1006,15 +1006,23 @@ button[data-testid="stTab"][aria-selected="true"] p {
 [data-testid="stCheckbox"] label > span:first-child {
     background-color: #ffffff !important;
     border: 2px solid rgba(100, 120, 220, 0.5) !important;
+    border-radius: 4px !important;
 }
-/* Checkbox checked — white fill with navy border, SVG checkmark visible */
+/* Checkbox checked — orange fill, orange border, white tick */
 [data-testid="stCheckbox"] label:has(input:checked) > span:first-child {
-    background-color: #ffffff !important;
-    border-color: #1a1a6e !important;
+    background-color: #FF6B2B !important;
+    border-color: #FF6B2B !important;
 }
 [data-testid="stCheckbox"] label:has(input:checked) > span:first-child svg {
-    fill: #1a1a6e !important;
-    color: #1a1a6e !important;
+    fill: #ffffff !important;
+    color: #ffffff !important;
+    opacity: 1 !important;
+}
+/* Checkbox label text — orange when checked */
+[data-testid="stCheckbox"] label:has(input:checked) p,
+[data-testid="stCheckbox"] label:has(input:checked) span:not(:first-child) {
+    color: #FF6B2B !important;
+    font-weight: 600 !important;
 }
 
 /* ── Info & Warning alerts — tangerine theme ── */
