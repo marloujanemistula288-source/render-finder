@@ -1482,24 +1482,45 @@ elif page == "Board":
                 if st.button("Remove", key=f"rm_{i}", use_container_width=True):
                     st.session_state.selected_images.pop(i); st.rerun()
         st.divider()
-        gc1, gc2, gc3 = st.columns([1.2, 1.5, 2])
+        gc1, gc2, gc3, gc4 = st.columns([1.2, 1.2, 1.5, 1.5])
         with gc1:
             mb_cols = st.selectbox("Grid columns", [2,3,4], index=1)
         with gc2:
+            export_fmt = st.selectbox("Format", ["PNG", "JPEG", "PDF"], index=0)
+        with gc3:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Generate Mood Board", type="primary", use_container_width=True):
                 with st.spinner("Compositing..."):
                     png = create_moodboard(imgs, cols=mb_cols)
                 if png:
-                    st.image(png)
-                    st.download_button("Download PNG", png, "moodboard.png", "image/png", use_container_width=True)
-                    st.success("Mood board ready.")
+                    st.session_state["_mb_png"] = png
+                    st.session_state["_mb_fmt"] = export_fmt
                 else:
                     st.warning("Could not load images.")
-        with gc3:
+        with gc4:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Clear All", use_container_width=True):
-                st.session_state.selected_images = []; st.rerun()
+                st.session_state.selected_images = []
+                st.session_state.pop("_mb_png", None)
+                st.rerun()
+
+        if "_mb_png" in st.session_state:
+            _raw_png = st.session_state["_mb_png"]
+            _fmt = st.session_state.get("_mb_fmt", "PNG")
+            st.image(_raw_png)
+            if _fmt == "PNG":
+                st.download_button("⬇ Download PNG", _raw_png, "moodboard.png", "image/png",
+                                   type="primary", use_container_width=True)
+            elif _fmt == "JPEG":
+                _jbuf = io.BytesIO()
+                Image.open(io.BytesIO(_raw_png)).convert("RGB").save(_jbuf, "JPEG", quality=92)
+                st.download_button("⬇ Download JPEG", _jbuf.getvalue(), "moodboard.jpg", "image/jpeg",
+                                   type="primary", use_container_width=True)
+            elif _fmt == "PDF":
+                _pbuf = io.BytesIO()
+                Image.open(io.BytesIO(_raw_png)).save(_pbuf, "PDF")
+                st.download_button("⬇ Download PDF", _pbuf.getvalue(), "moodboard.pdf", "application/pdf",
+                                   type="primary", use_container_width=True)
 
     st.divider()
     st.markdown('<div class="zn-card-label">SAVED PALETTES</div>', unsafe_allow_html=True)
