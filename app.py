@@ -7,7 +7,6 @@ from PIL import Image
 from colorthief import ColorThief
 from dotenv import load_dotenv
 from collections import Counter
-import streamlit.components.v1 as components
 from streamlit_javascript import st_javascript
 
 load_dotenv()
@@ -15,12 +14,8 @@ load_dotenv()
 _LS_KEY = "rf_sessions"  # localStorage key — private per browser/user
 
 def _ls_write(sessions):
-    """Persist sessions list to the user's browser localStorage."""
-    payload = json.dumps(json.dumps(sessions))  # double-encode: Python str → JS string literal
-    components.html(
-        f"<script>try{{window.parent.localStorage.setItem('{_LS_KEY}',{payload});}}catch(e){{}}</script>",
-        height=0,
-    )
+    """Stage sessions for localStorage write on the next render via st_javascript."""
+    st.session_state["_ls_pending_write"] = sessions
 
 def _build_session_record(name):
     return {
@@ -1220,13 +1215,21 @@ if page == "Brief":
         # ── Saved Sessions (per-user browser localStorage) ────────────────────
         st.markdown('<div class="sv-label">SAVED SESSIONS</div>', unsafe_allow_html=True)
 
-        # Read from localStorage only on fresh page load (not after save/delete reruns).
-        # If _cached_sessions is already in session_state, trust it — don't let the
-        # stale localStorage read (which lags one render behind the write) overwrite it.
-        _ls_raw = st_javascript(
-            f"window.parent.localStorage.getItem('{_LS_KEY}') || '[]'",
-            key="ls_sessions_read",
-        )
+        # If there's a pending write, fold it into the same JS call as the read
+        # so the write and read are atomic — no race condition with st.rerun().
+        _pending_write = st.session_state.pop("_ls_pending_write", None)
+        if _pending_write is not None:
+            _payload_js = json.dumps(json.dumps(_pending_write))
+            _js_expr = (
+                f"(localStorage.setItem('{_LS_KEY}',{_payload_js}),"
+                f"localStorage.getItem('{_LS_KEY}')||'[]')"
+            )
+        else:
+            _js_expr = f"localStorage.getItem('{_LS_KEY}')||'[]'"
+
+        _ls_raw = st_javascript(_js_expr, key="ls_sessions_rw")
+
+        # Only populate _cached_sessions from localStorage on a fresh page load.
         if "_cached_sessions" not in st.session_state:
             if isinstance(_ls_raw, str) and _ls_raw not in ("0", "", "[]"):
                 try:
