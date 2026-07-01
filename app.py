@@ -14,8 +14,9 @@ load_dotenv()
 _LS_KEY = "rf_sessions"  # localStorage key — private per browser/user
 
 def _ls_write(sessions):
-    """Stage sessions for localStorage write on the next render via st_javascript."""
+    """Stage sessions for localStorage write; bump version so st_javascript re-executes."""
     st.session_state["_ls_pending_write"] = sessions
+    st.session_state["_ls_write_ver"] = st.session_state.get("_ls_write_ver", 0) + 1
 
 def _build_session_record(name):
     return {
@@ -1215,8 +1216,10 @@ if page == "Brief":
         # ── Saved Sessions (per-user browser localStorage) ────────────────────
         st.markdown('<div class="sv-label">SAVED SESSIONS</div>', unsafe_allow_html=True)
 
-        # If there's a pending write, fold it into the same JS call as the read
-        # so the write and read are atomic — no race condition with st.rerun().
+        # Pending write? Fold it into the same JS call as the read so it's atomic.
+        # Version counter in the key forces st_javascript to re-instantiate (fresh
+        # JS execution) instead of returning a cached value.
+        _ls_ver = st.session_state.get("_ls_write_ver", 0)
         _pending_write = st.session_state.pop("_ls_pending_write", None)
         if _pending_write is not None:
             _payload_js = json.dumps(json.dumps(_pending_write))
@@ -1227,7 +1230,7 @@ if page == "Brief":
         else:
             _js_expr = f"localStorage.getItem('{_LS_KEY}')||'[]'"
 
-        _ls_raw = st_javascript(_js_expr, key="ls_sessions_rw")
+        _ls_raw = st_javascript(_js_expr, key=f"ls_sessions_rw_{_ls_ver}")
 
         # Only populate _cached_sessions from localStorage on a fresh page load.
         if "_cached_sessions" not in st.session_state:
@@ -1277,6 +1280,16 @@ if page == "Brief":
             st.session_state["_cached_sessions"] = _updated
             _ls_write(_updated)
             st.success("Session saved!")
+            st.rerun()
+
+        if st.button("＋ New Session", use_container_width=True, key="new_session_btn"):
+            # Clear all work state via the restore-staging pattern so widget
+            # keys are reset before widgets render on next rerun.
+            st.session_state["_session_restore"] = {
+                "brief_space": "", "brief_style": "Dreamy",
+                "brief_mood": "", "brief_background": "White/Isolated",
+                "selected_images": [], "saved_palettes": [], "generated_queries": [],
+            }
             st.rerun()
 
         st.markdown('<hr style="border-color:rgba(13,31,138,0.08);margin:1rem 0">', unsafe_allow_html=True)
