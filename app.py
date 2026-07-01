@@ -1145,9 +1145,9 @@ if page == "Brief":
         <div class="sc-title">STAY CONNECTED</div>
         <div class="sc-body">Forward your curated board references straight to your inbox.</div>
         """, unsafe_allow_html=True)
-     board_email = st.text_input("Email", placeholder="you@studio.com",
-                            key="board_email_input", label_visibility="collapsed")
-if st.button("Send Board →", key="send_board_btn", type="primary", use_container_width=True):
+        board_email = st.text_input("Email", placeholder="you@studio.com",
+                                    key="board_email_input", label_visibility="collapsed")
+        if st.button("Send Board →", key="send_board_btn", type="primary", use_container_width=True):
             _email = st.session_state.get("board_email_input", "").strip()
             _imgs  = st.session_state.get("selected_images", [])
             if not _email or "@" not in _email:
@@ -1161,7 +1161,7 @@ if st.button("Send Board →", key="send_board_btn", type="primary", use_contain
                 else:
                     st.session_state["_send_result"] = ("err", msg)
             st.rerun()
-               # ── Send board feedback (rendered outside column so it always shows) ──
+        # ── Send board feedback (rendered outside column so it always shows) ──
 if "_send_result" in st.session_state:
     _kind, _txt = st.session_state.pop("_send_result")
     if _kind == "ok":
