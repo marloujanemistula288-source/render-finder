@@ -220,21 +220,30 @@ def create_collage_moodboard(images, palette_colors=None):
 
     # Palette swatches — right column, stacked bars (like editorial reference)
     if palette_colors:
-        draw = ImageDraw.Draw(canvas)
-        colors = [c for c in palette_colors[:8] if c and len(c) == 7]
-        sw_w_base = 220  # base swatch width
-        sw_h = 52
-        sw_gap = 14
-        sw_x = W - sw_w_base - 60
-        sw_y = H - (len(colors) * (sw_h + sw_gap)) - 80
-        for hex_c in colors:
-            try:
-                rv = int(hex_c[1:3], 16); gv = int(hex_c[3:5], 16); bv = int(hex_c[5:7], 16)
-                # vary width slightly so bars feel organic
-                bar_w = sw_w_base - (colors.index(hex_c) % 3) * 30
-                draw.rectangle([sw_x, sw_y, sw_x + bar_w, sw_y + sw_h], fill=(rv, gv, bv))
-                sw_y += sw_h + sw_gap
-            except: pass
+        colors = [c for c in palette_colors if c and len(c) == 7]
+        if colors:
+            # Scale bar size so all colours fit without overlapping images
+            sw_h = max(28, min(52, (H - 120) // len(colors) - 10))
+            sw_gap = max(6, sw_h // 5)
+            total_pal_h = len(colors) * (sw_h + sw_gap)
+            # Extend canvas if palette strip would push below bottom
+            needed_h = total_pal_h + 120
+            if needed_h > H:
+                H = needed_h + 40
+                new_canvas = Image.new("RGB", (W, H), BG)
+                new_canvas.paste(canvas, (0, 0))
+                canvas = new_canvas
+            draw = ImageDraw.Draw(canvas)
+            sw_w_base = 220
+            sw_x = W - sw_w_base - 60
+            sw_y = H - total_pal_h - 80
+            for idx, hex_c in enumerate(colors):
+                try:
+                    rv = int(hex_c[1:3], 16); gv = int(hex_c[3:5], 16); bv = int(hex_c[5:7], 16)
+                    bar_w = sw_w_base - (idx % 3) * 30
+                    draw.rectangle([sw_x, sw_y, sw_x + bar_w, sw_y + sw_h], fill=(rv, gv, bv))
+                    sw_y += sw_h + sw_gap
+                except: pass
 
     buf = io.BytesIO(); canvas.save(buf, "PNG"); return buf.getvalue()
 
@@ -253,23 +262,27 @@ def create_moodboard(images, cols=3, tw=400, th=280, gap=10, palette_colors=None
     grid_h = rows*(th+gap)+gap
     # Reserve space for palette strip if needed
     colors = [c for c in (palette_colors or []) if c and len(c) == 7]
-    sw_h = 60; sw_gap = gap; pal_h = (sw_h + sw_gap) if colors else 0
+    sw_h = 60; sw_gap = gap
+    # Fit all swatches into rows of up to 12 per row
+    swatch_cols = 12
+    pal_rows = ((len(colors) + swatch_cols - 1) // swatch_cols) if colors else 0
+    pal_h = pal_rows * (sw_h + sw_gap) if colors else 0
     board = Image.new("RGB", (grid_w, grid_h + pal_h), (240, 243, 255))
     for i, img in enumerate(imgs):
         r2, c = divmod(i, cols)
         board.paste(img, (c*(tw+gap)+gap, r2*(th+gap)+gap))
-    # Palette strip below grid
+    # Multi-row palette strip below grid
     if colors:
         from PIL import ImageDraw as _ID
         draw = _ID.Draw(board)
-        sw_w = max(40, (grid_w - gap*(len(colors)+1)) // len(colors))
-        sw_x = gap
-        sw_y = grid_h + sw_gap
-        for hex_c in colors:
+        sw_w = max(40, (grid_w - gap*(swatch_cols+1)) // swatch_cols)
+        for idx, hex_c in enumerate(colors):
             try:
+                row_i, col_i = divmod(idx, swatch_cols)
+                sw_x = gap + col_i * (sw_w + gap)
+                sw_y = grid_h + sw_gap + row_i * (sw_h + sw_gap)
                 rv = int(hex_c[1:3],16); gv = int(hex_c[3:5],16); bv = int(hex_c[5:7],16)
                 draw.rectangle([sw_x, sw_y, sw_x+sw_w, sw_y+sw_h], fill=(rv,gv,bv))
-                sw_x += sw_w + gap
             except: pass
     buf = io.BytesIO(); board.save(buf, "PNG"); return buf.getvalue()
 
