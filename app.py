@@ -1557,14 +1557,48 @@ elif page == "Board":
         st.info("Browse images on **Browse** and click **+ Board** to add them here.")
     else:
         imgs = st.session_state.selected_images
-        st.markdown(f"<p style='color:#3D5299;font-size:0.88rem'>{len(imgs)} image(s) selected</p>",
+
+        # ── Image selection ───────────────────────────────────────────────────
+        st.markdown("<div style='font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;"
+                    "color:#1635CC;font-weight:700;margin-bottom:0.5rem'>IMAGES</div>",
                     unsafe_allow_html=True)
+        st.caption("Tick images to include in the moodboard. Untick to exclude without removing.")
         prev_cols = st.columns(min(len(imgs), 4))
+        _mb_img_flags = []
         for i, img in enumerate(imgs):
             with prev_cols[i % 4]:
                 st.image(img["thumb"], width="stretch")
+                _included = st.checkbox("Include", value=True, key=f"mb_img_{i}")
+                _mb_img_flags.append(_included)
                 if st.button("Remove", key=f"rm_{i}", use_container_width=True):
                     st.session_state.selected_images.pop(i); st.rerun()
+
+        # ── Palette selection ─────────────────────────────────────────────────
+        _saved_pals = st.session_state.get("saved_palettes", [])
+        _mb_pal_flags = []
+        if _saved_pals:
+            st.divider()
+            st.markdown("<div style='font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;"
+                        "color:#1635CC;font-weight:700;margin-bottom:0.5rem'>PALETTES</div>",
+                        unsafe_allow_html=True)
+            st.caption("Tick palettes to embed their swatches in the moodboard.")
+            pal_cols = st.columns(min(len(_saved_pals), 3))
+            for j, _pal in enumerate(_saved_pals):
+                with pal_cols[j % 3]:
+                    _swatches_html = "".join(
+                        f"<div style='display:inline-block;width:28px;height:28px;"
+                        f"background:{h};border-radius:3px;margin:2px'></div>"
+                        for h in _pal.get("hexes", [])[:8]
+                    )
+                    st.markdown(
+                        f"<div style='margin-bottom:4px'>{_swatches_html}</div>"
+                        f"<div style='font-size:0.72rem;color:#3D5299;margin-bottom:6px'>"
+                        f"{_pal.get('label','Palette')}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    _pal_inc = st.checkbox("Include", value=True, key=f"mb_pal_{j}")
+                    _mb_pal_flags.append(_pal_inc)
+
         st.divider()
         gc1, gc2, gc3, gc4, gc5 = st.columns([1.2, 1.2, 1.2, 1.5, 1.5])
         with gc1:
@@ -1577,20 +1611,26 @@ elif page == "Board":
         with gc4:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Generate Mood Board", type="primary", use_container_width=True):
-                with st.spinner("Compositing..."):
-                    _pal_colors = []
-                    for _pal in st.session_state.get("saved_palettes", []):
+                _sel_imgs = [img for img, flag in zip(imgs, _mb_img_flags) if flag]
+                _pal_colors = []
+                for j, _pal in enumerate(_saved_pals):
+                    if j < len(_mb_pal_flags) and _mb_pal_flags[j]:
                         _pal_colors.extend(_pal.get("hexes", []))
-                    if mb_layout == "Collage":
-                        png = create_collage_moodboard(imgs, palette_colors=_pal_colors or None)
-                    else:
-                        png = create_moodboard(imgs, cols=mb_cols,
-                                               palette_colors=_pal_colors or None)
-                if png:
-                    st.session_state["_mb_png"] = png
-                    st.session_state["_mb_fmt"] = export_fmt
+                if not _sel_imgs:
+                    st.warning("Select at least one image to include.")
                 else:
-                    st.warning("Could not load images.")
+                    with st.spinner("Compositing..."):
+                        if mb_layout == "Collage":
+                            png = create_collage_moodboard(_sel_imgs,
+                                                           palette_colors=_pal_colors or None)
+                        else:
+                            png = create_moodboard(_sel_imgs, cols=mb_cols,
+                                                   palette_colors=_pal_colors or None)
+                    if png:
+                        st.session_state["_mb_png"] = png
+                        st.session_state["_mb_fmt"] = export_fmt
+                    else:
+                        st.warning("Could not load images.")
         with gc5:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Clear All", use_container_width=True):
