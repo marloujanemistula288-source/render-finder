@@ -1170,6 +1170,9 @@ if page == "Brief":
                     go_to("Search")
         with b2:
             if st.button("BROWSE IMAGES", key="cta_browse", use_container_width=True):
+                st.session_state.filter_results = []
+                st.session_state.browse_results = []
+                st.session_state["_auto_browse"] = True
                 go_to("Browse")
 
         st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
@@ -1502,21 +1505,29 @@ elif page == "Browse":
             with st.spinner("Fetching images..."):
                 st.session_state.filter_results = search_unsplash(q, n=9) + search_pexels(q, n=9)
 
+    def _run_browse_from_brief():
+        _snap = st.session_state.get("_brief_snapshot", {})
+        sp = st.session_state.brief_space or _snap.get("space", "")
+        mo = st.session_state.brief_mood or _snap.get("mood", "")
+        if not sp or not mo:
+            st.warning("Set a brief on the Home page first.")
+            return
+        if not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
+            st.warning("Add image API keys to Streamlit secrets.")
+            return
+        brief_bg_suffix = " white background isolated product photography" if st.session_state.brief_background == "White/Isolated" else ""
+        sty = st.session_state.brief_style or _snap.get("style", "Dreamy")
+        q = f"{sty} {sp} {mo}{brief_bg_suffix} interior architecture"
+        with st.spinner("Fetching images..."):
+            st.session_state.browse_results = search_unsplash(q, n=9) + search_pexels(q, n=9)
+
+    if st.session_state.pop("_auto_browse", False):
+        _run_browse_from_brief()
+
     fa2, _ = st.columns([2, 5])
     with fa2:
         if st.button("Browse from Brief", use_container_width=True):
-            _snap = st.session_state.get("_brief_snapshot", {})
-            sp = st.session_state.brief_space or _snap.get("space", "")
-            mo = st.session_state.brief_mood or _snap.get("mood", "")
-            if not sp or not mo: st.warning("Set a brief on the Home page first.")
-            elif not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
-                st.warning("Add image API keys to Streamlit secrets.")
-            else:
-                brief_bg_suffix = " white background isolated product photography" if st.session_state.brief_background == "White/Isolated" else ""
-                sty = st.session_state.brief_style or _snap.get("style", "Dreamy")
-                q = f"{sty} {sp} {mo}{brief_bg_suffix} interior architecture"
-                with st.spinner("Fetching images..."):
-                    st.session_state.browse_results = search_unsplash(q, n=9) + search_pexels(q, n=9)
+            _run_browse_from_brief()
 
     results = st.session_state.filter_results or st.session_state.browse_results
     if results:
