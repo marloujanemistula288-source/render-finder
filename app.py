@@ -803,7 +803,10 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
 .sv-time { font-size: 0.68rem; color: #8892C0; font-family: 'Inter', sans-serif; }
 .sv-empty { font-size: 0.75rem; color: #8892C0; font-family: 'Inter', sans-serif; font-style: italic; }
-/* Delete session button — red-tinted, ✕ centred */
+/* Delete session button — red-tinted, ✕ centred and level with Load */
+.sv-del-btn {
+    display: contents !important; /* no layout box — children flow naturally */
+}
 .sv-del-btn [data-testid="stButton"] button {
     background: rgba(220,60,60,0.08) !important;
     border-color: rgba(220,60,60,0.25) !important;
