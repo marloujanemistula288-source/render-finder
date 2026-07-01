@@ -173,6 +173,65 @@ def extract_palette(url, n=6):
         return [f"#{rv:02x}{g:02x}{b:02x}" for rv, g, b in ct.get_palette(color_count=n, quality=1)]
     except: return []
 
+def create_collage_moodboard(images, palette_colors=None):
+    from PIL import ImageDraw, ImageFilter
+    W, H = 1600, 2000
+    BG = (248, 244, 238)
+    canvas = Image.new("RGB", (W, H), BG)
+
+    # Staggered editorial placements: (x, y, w, h)
+    # Designed for up to 9 images — each cluster of 3 fills a horizontal band
+    _all_placements = [
+        (55,  50,  700, 500),   # 0 hero top-left
+        (710, 120, 460, 340),   # 1 med top-right
+        (940, 420, 580, 420),   # 2 large right-mid
+        (60,  540, 480, 360),   # 3 med mid-left
+        (520, 540, 360, 260),   # 4 small mid-centre
+        (60,  900, 700, 500),   # 5 hero bottom-left
+        (730, 860, 380, 280),   # 6 small bottom-centre
+        (700, 1130, 560, 400),  # 7 large bottom-right
+        (60,  1390, 440, 320),  # 8 accent bottom
+    ]
+
+    loaded = []
+    for d in images[:9]:
+        try:
+            r = requests.get(d.get("full", d["thumb"]), timeout=12)
+            loaded.append(Image.open(io.BytesIO(r.content)).convert("RGB"))
+        except:
+            loaded.append(None)
+
+    shadow_layer = Image.new("RGB", (W, H), BG)
+    shadow_draw  = ImageDraw.Draw(shadow_layer)
+
+    for i, img in enumerate(loaded):
+        if img is None or i >= len(_all_placements): continue
+        x, y, w, h = _all_placements[i]
+        # Soft shadow rectangle
+        shadow_draw.rectangle([x+8, y+8, x+w+8, y+h+8], fill=(200, 196, 190))
+    # Blur the shadow layer and composite onto canvas
+    shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(12))
+    canvas = Image.blend(canvas, shadow_layer, alpha=0.45)
+
+    for i, img in enumerate(loaded):
+        if img is None or i >= len(_all_placements): continue
+        x, y, w, h = _all_placements[i]
+        canvas.paste(img.resize((w, h), Image.LANCZOS), (x, y))
+
+    # Color swatches row (bottom strip)
+    if palette_colors:
+        draw = ImageDraw.Draw(canvas)
+        sw_x, sw_y = 60, H - 110
+        for hex_c in palette_colors[:8]:
+            try:
+                r2 = int(hex_c[1:3], 16); g2 = int(hex_c[3:5], 16); b2 = int(hex_c[5:7], 16)
+                draw.rectangle([sw_x, sw_y, sw_x + 90, sw_y + 50], fill=(r2, g2, b2))
+                sw_x += 110
+            except: pass
+
+    buf = io.BytesIO(); canvas.save(buf, "PNG"); return buf.getvalue()
+
+
 def create_moodboard(images, cols=3, tw=400, th=280, gap=10):
     imgs = []
     for d in images:
@@ -1482,22 +1541,31 @@ elif page == "Board":
                 if st.button("Remove", key=f"rm_{i}", use_container_width=True):
                     st.session_state.selected_images.pop(i); st.rerun()
         st.divider()
-        gc1, gc2, gc3, gc4 = st.columns([1.2, 1.2, 1.5, 1.5])
+        gc1, gc2, gc3, gc4, gc5 = st.columns([1.2, 1.2, 1.2, 1.5, 1.5])
         with gc1:
-            mb_cols = st.selectbox("Grid columns", [2,3,4], index=1)
+            mb_layout = st.selectbox("Layout", ["Grid", "Collage"], index=0)
         with gc2:
-            export_fmt = st.selectbox("Format", ["PNG", "JPEG", "PDF"], index=0)
+            mb_cols = st.selectbox("Grid columns", [2, 3, 4], index=1,
+                                   disabled=(mb_layout == "Collage"))
         with gc3:
+            export_fmt = st.selectbox("Format", ["PNG", "JPEG", "PDF"], index=0)
+        with gc4:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Generate Mood Board", type="primary", use_container_width=True):
                 with st.spinner("Compositing..."):
-                    png = create_moodboard(imgs, cols=mb_cols)
+                    if mb_layout == "Collage":
+                        _pal_colors = []
+                        for _pal in st.session_state.get("saved_palettes", []):
+                            _pal_colors.extend(_pal.get("hexes", []))
+                        png = create_collage_moodboard(imgs, palette_colors=_pal_colors or None)
+                    else:
+                        png = create_moodboard(imgs, cols=mb_cols)
                 if png:
                     st.session_state["_mb_png"] = png
                     st.session_state["_mb_fmt"] = export_fmt
                 else:
                     st.warning("Could not load images.")
-        with gc4:
+        with gc5:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Clear All", use_container_width=True):
                 st.session_state.selected_images = []
