@@ -1240,7 +1240,7 @@ if page == "Brief":
 
         if _all_sessions:
             for _i, _s in enumerate(_all_sessions[:4]):
-                _col_name, _col_load, _col_del = st.columns([3, 1, 1])
+                _col_name, _col_load, _col_del = st.columns([3, 1.4, 0.7])
                 with _col_name:
                     st.markdown(
                         f"<div class='sv-item'>"
