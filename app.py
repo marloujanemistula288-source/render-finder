@@ -803,23 +803,23 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
 .sv-time { font-size: 0.68rem; color: #8892C0; font-family: 'Inter', sans-serif; }
 .sv-empty { font-size: 0.75rem; color: #8892C0; font-family: 'Inter', sans-serif; font-style: italic; }
-/* Delete session button — small red-tinted ✕, centred */
-[data-testid="stButton"] button[kind="secondary"]:has(p:contains("✕")) {
+/* Delete session button — red-tinted, ✕ centred */
+.sv-del-btn [data-testid="stButton"] button {
     background: rgba(220,60,60,0.08) !important;
     border-color: rgba(220,60,60,0.25) !important;
     color: #CC2222 !important;
-    font-size: 0.85rem !important;
-    padding: 0 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    padding: 0 !important;
 }
-[data-testid="stButton"] button[kind="secondary"]:has(p:contains("✕")) p {
+.sv-del-btn [data-testid="stButton"] button p {
     text-align: center !important;
     width: 100% !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
+    line-height: 1 !important;
 }
-[data-testid="stButton"] button[kind="secondary"]:has(p:contains("✕")):hover {
+.sv-del-btn [data-testid="stButton"] button:hover {
     background: rgba(220,60,60,0.18) !important;
     border-color: #CC2222 !important;
 }
@@ -1262,12 +1262,14 @@ if page == "Brief":
                         _restore_session(_s)
                         st.rerun()
                 with _col_del:
+                    st.markdown('<div class="sv-del-btn">', unsafe_allow_html=True)
                     if st.button("✕", key=f"del_session_{_i}", use_container_width=True,
                                  help="Delete this session"):
                         _remaining = [s for j, s in enumerate(_all_sessions) if j != _i]
                         st.session_state["_cached_sessions"] = _remaining
                         _ls_write(_remaining)
                         st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.markdown("<div class='sv-empty'>No saved sessions yet.</div>", unsafe_allow_html=True)
 
