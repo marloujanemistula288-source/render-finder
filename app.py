@@ -39,7 +39,7 @@ def _restore_session(s):
     # Stage under a temp key; the pre-widget block at top applies it after rerun.
     st.session_state["_session_restore"] = s
 
-st.set_page_config(page_title="Render Finder", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Visionpull", layout="wide", initial_sidebar_state="collapsed")
 
 # ── Session state ──────────────────────────────────────────────────────────────
 _defaults = {
@@ -365,14 +365,14 @@ def send_board_email(to_email, images):
     )
     body = (
         f"<div style='font-family:sans-serif;max-width:640px;margin:auto'>"
-        f"<h2 style='color:#0D1F8A'>Your Render Finder Board</h2>"
+        f"<h2 style='color:#0D1F8A'>Your Visionpull Board</h2>"
         f"<p style='color:#3D5299'>{len(images)} reference image(s) curated for you.</p>"
         f"<div style='display:flex;flex-wrap:wrap;gap:8px;margin-top:16px'>{img_html}</div>"
-        f"<p style='color:#8892C0;font-size:12px;margin-top:24px'>Sent from Render Finder</p>"
+        f"<p style='color:#8892C0;font-size:12px;margin-top:24px'>Sent from Visionpull</p>"
         f"</div>"
     )
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Your Render Finder Board"
+    msg["Subject"] = "Your Visionpull Board"
     msg["From"] = smtp_from
     msg["To"] = to_email
     msg.attach(MIMEText(body, "html"))
@@ -1077,7 +1077,7 @@ with c_logo:
         <line x1="14.78" y1="3.22" x2="12.36" y2="5.64" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
         <line x1="5.64" y1="12.36" x2="3.22" y2="14.78" stroke="#0D1F8A" stroke-width="1.4" stroke-linecap="round"/>
       </svg>
-      RENDER FINDER
+      VISIONPULL
     </div>""", unsafe_allow_html=True)
 
 with c_nav:
@@ -1117,7 +1117,7 @@ if page == "Brief":
           <div class="zn-badge-pill">● WHERE RENDERS BEGIN</div>
           <h1 class="zn-headline">Where every reference<br>finds its <em>render.</em></h1>
           <p class="zn-hero-body">
-            Render Finder curates architectural and interior references from
+            Visionpull curates architectural and interior references from
             Pinterest, Behance, Unsplash, Pexels, and more — powered by Claude
             AI to match your exact brief.
           </p>
