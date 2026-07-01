@@ -803,6 +803,18 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
 .sv-time { font-size: 0.68rem; color: #8892C0; font-family: 'Inter', sans-serif; }
 .sv-empty { font-size: 0.75rem; color: #8892C0; font-family: 'Inter', sans-serif; font-style: italic; }
+/* Delete session button — small red-tinted ✕ */
+[data-testid="stButton"] button[kind="secondary"]:has(p:contains("✕")) {
+    background: rgba(220,60,60,0.08) !important;
+    border-color: rgba(220,60,60,0.25) !important;
+    color: #CC2222 !important;
+    font-size: 0.75rem !important;
+    padding: 0.2rem !important;
+}
+[data-testid="stButton"] button[kind="secondary"]:has(p:contains("✕")):hover {
+    background: rgba(220,60,60,0.18) !important;
+    border-color: #CC2222 !important;
+}
 
 /* ── Stats grid ── */
 .zn-stats-grid { display: flex; gap: 1.5rem; margin-bottom: 1rem; }
@@ -1228,7 +1240,7 @@ if page == "Brief":
 
         if _all_sessions:
             for _i, _s in enumerate(_all_sessions[:4]):
-                _col_name, _col_btn = st.columns([3, 1])
+                _col_name, _col_load, _col_del = st.columns([3, 1, 1])
                 with _col_name:
                     st.markdown(
                         f"<div class='sv-item'>"
@@ -1237,9 +1249,16 @@ if page == "Brief":
                         f"</div>",
                         unsafe_allow_html=True,
                     )
-                with _col_btn:
+                with _col_load:
                     if st.button("Load", key=f"restore_{_i}", use_container_width=True):
                         _restore_session(_s)
+                        st.rerun()
+                with _col_del:
+                    if st.button("✕", key=f"del_session_{_i}", use_container_width=True,
+                                 help="Delete this session"):
+                        _remaining = [s for j, s in enumerate(_all_sessions) if j != _i]
+                        st.session_state["_cached_sessions"] = _remaining
+                        _ls_write(_remaining)
                         st.rerun()
         else:
             st.markdown("<div class='sv-empty'>No saved sessions yet.</div>", unsafe_allow_html=True)
