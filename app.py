@@ -803,13 +803,21 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
 .sv-time { font-size: 0.68rem; color: #8892C0; font-family: 'Inter', sans-serif; }
 .sv-empty { font-size: 0.75rem; color: #8892C0; font-family: 'Inter', sans-serif; font-style: italic; }
-/* Delete session button — small red-tinted ✕ */
+/* Delete session button — small red-tinted ✕, centred */
 [data-testid="stButton"] button[kind="secondary"]:has(p:contains("✕")) {
     background: rgba(220,60,60,0.08) !important;
     border-color: rgba(220,60,60,0.25) !important;
     color: #CC2222 !important;
-    font-size: 0.75rem !important;
-    padding: 0.2rem !important;
+    font-size: 0.85rem !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+[data-testid="stButton"] button[kind="secondary"]:has(p:contains("✕")) p {
+    text-align: center !important;
+    width: 100% !important;
+    margin: 0 !important;
 }
 [data-testid="stButton"] button[kind="secondary"]:has(p:contains("✕")):hover {
     background: rgba(220,60,60,0.18) !important;
