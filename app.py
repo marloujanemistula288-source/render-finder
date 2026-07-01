@@ -1220,18 +1220,21 @@ if page == "Brief":
         # ── Saved Sessions (per-user browser localStorage) ────────────────────
         st.markdown('<div class="sv-label">SAVED SESSIONS</div>', unsafe_allow_html=True)
 
-        # Read from this user's localStorage (returns 0 on first render while JS executes)
+        # Read from localStorage only on fresh page load (not after save/delete reruns).
+        # If _cached_sessions is already in session_state, trust it — don't let the
+        # stale localStorage read (which lags one render behind the write) overwrite it.
         _ls_raw = st_javascript(
             f"window.parent.localStorage.getItem('{_LS_KEY}') || '[]'",
             key="ls_sessions_read",
         )
-        if isinstance(_ls_raw, str) and _ls_raw not in ("0", "", "[]"):
-            try:
-                _parsed = json.loads(_ls_raw)
-                if isinstance(_parsed, list):
-                    st.session_state["_cached_sessions"] = _parsed
-            except Exception:
-                pass
+        if "_cached_sessions" not in st.session_state:
+            if isinstance(_ls_raw, str) and _ls_raw not in ("0", "", "[]"):
+                try:
+                    _parsed = json.loads(_ls_raw)
+                    if isinstance(_parsed, list):
+                        st.session_state["_cached_sessions"] = _parsed
+                except Exception:
+                    pass
 
         _all_sessions = st.session_state.get("_cached_sessions", [])
 
