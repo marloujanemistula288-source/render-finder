@@ -218,21 +218,28 @@ def create_collage_moodboard(images, palette_colors=None):
         x, y, w, h = _all_placements[i]
         canvas.paste(img.resize((w, h), Image.LANCZOS), (x, y))
 
-    # Color swatches row (bottom strip)
+    # Palette swatches — right column, stacked bars (like editorial reference)
     if palette_colors:
         draw = ImageDraw.Draw(canvas)
-        sw_x, sw_y = 60, H - 110
-        for hex_c in palette_colors[:8]:
+        colors = [c for c in palette_colors[:8] if c and len(c) == 7]
+        sw_w_base = 220  # base swatch width
+        sw_h = 52
+        sw_gap = 14
+        sw_x = W - sw_w_base - 60
+        sw_y = H - (len(colors) * (sw_h + sw_gap)) - 80
+        for hex_c in colors:
             try:
-                r2 = int(hex_c[1:3], 16); g2 = int(hex_c[3:5], 16); b2 = int(hex_c[5:7], 16)
-                draw.rectangle([sw_x, sw_y, sw_x + 90, sw_y + 50], fill=(r2, g2, b2))
-                sw_x += 110
+                rv = int(hex_c[1:3], 16); gv = int(hex_c[3:5], 16); bv = int(hex_c[5:7], 16)
+                # vary width slightly so bars feel organic
+                bar_w = sw_w_base - (colors.index(hex_c) % 3) * 30
+                draw.rectangle([sw_x, sw_y, sw_x + bar_w, sw_y + sw_h], fill=(rv, gv, bv))
+                sw_y += sw_h + sw_gap
             except: pass
 
     buf = io.BytesIO(); canvas.save(buf, "PNG"); return buf.getvalue()
 
 
-def create_moodboard(images, cols=3, tw=400, th=280, gap=10):
+def create_moodboard(images, cols=3, tw=400, th=280, gap=10, palette_colors=None):
     imgs = []
     for d in images:
         try:
@@ -242,10 +249,28 @@ def create_moodboard(images, cols=3, tw=400, th=280, gap=10):
         except: pass
     if not imgs: return None
     rows = (len(imgs) + cols - 1) // cols
-    board = Image.new("RGB", (cols*(tw+gap)+gap, rows*(th+gap)+gap), (240,243,255))
+    grid_w = cols*(tw+gap)+gap
+    grid_h = rows*(th+gap)+gap
+    # Reserve space for palette strip if needed
+    colors = [c for c in (palette_colors or []) if c and len(c) == 7]
+    sw_h = 60; sw_gap = gap; pal_h = (sw_h + sw_gap) if colors else 0
+    board = Image.new("RGB", (grid_w, grid_h + pal_h), (240, 243, 255))
     for i, img in enumerate(imgs):
         r2, c = divmod(i, cols)
         board.paste(img, (c*(tw+gap)+gap, r2*(th+gap)+gap))
+    # Palette strip below grid
+    if colors:
+        from PIL import ImageDraw as _ID
+        draw = _ID.Draw(board)
+        sw_w = max(40, (grid_w - gap*(len(colors)+1)) // len(colors))
+        sw_x = gap
+        sw_y = grid_h + sw_gap
+        for hex_c in colors:
+            try:
+                rv = int(hex_c[1:3],16); gv = int(hex_c[3:5],16); bv = int(hex_c[5:7],16)
+                draw.rectangle([sw_x, sw_y, sw_x+sw_w, sw_y+sw_h], fill=(rv,gv,bv))
+                sw_x += sw_w + gap
+            except: pass
     buf = io.BytesIO(); board.save(buf, "PNG"); return buf.getvalue()
 
 def extract_keywords(texts):
@@ -1553,13 +1578,14 @@ elif page == "Board":
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Generate Mood Board", type="primary", use_container_width=True):
                 with st.spinner("Compositing..."):
+                    _pal_colors = []
+                    for _pal in st.session_state.get("saved_palettes", []):
+                        _pal_colors.extend(_pal.get("hexes", []))
                     if mb_layout == "Collage":
-                        _pal_colors = []
-                        for _pal in st.session_state.get("saved_palettes", []):
-                            _pal_colors.extend(_pal.get("hexes", []))
                         png = create_collage_moodboard(imgs, palette_colors=_pal_colors or None)
                     else:
-                        png = create_moodboard(imgs, cols=mb_cols)
+                        png = create_moodboard(imgs, cols=mb_cols,
+                                               palette_colors=_pal_colors or None)
                 if png:
                     st.session_state["_mb_png"] = png
                     st.session_state["_mb_fmt"] = export_fmt
