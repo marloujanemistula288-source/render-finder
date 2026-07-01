@@ -4,3 +4,4 @@ python-dotenv
 requests
 colorthief
 Pillow
+streamlit-javascript

@@ -7,28 +7,23 @@ from PIL import Image
 from colorthief import ColorThief
 from dotenv import load_dotenv
 from collections import Counter
+import streamlit.components.v1 as components
+from streamlit_javascript import st_javascript
 
 load_dotenv()
 
-SESSIONS_FILE = "saved_sessions.json"
+_LS_KEY = "rf_sessions"  # localStorage key — private per browser/user
 
-def _load_saved_sessions():
-    try:
-        with open(SESSIONS_FILE, "r") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []
+def _ls_write(sessions):
+    """Persist sessions list to the user's browser localStorage."""
+    payload = json.dumps(json.dumps(sessions))  # double-encode: Python str → JS string literal
+    components.html(
+        f"<script>try{{window.parent.localStorage.setItem('{_LS_KEY}',{payload});}}catch(e){{}}</script>",
+        height=0,
+    )
 
-def _persist_sessions(sessions):
-    try:
-        with open(SESSIONS_FILE, "w") as f:
-            json.dump(sessions, f, indent=2)
-    except Exception:
-        pass
-
-def _save_current_session(name):
-    sessions = _load_saved_sessions()
-    sessions.insert(0, {
+def _build_session_record(name):
+    return {
         "name": name,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "brief_space": st.session_state.get("brief_space", ""),
@@ -38,10 +33,7 @@ def _save_current_session(name):
         "selected_images": st.session_state.get("selected_images", []),
         "saved_palettes": st.session_state.get("saved_palettes", []),
         "generated_queries": st.session_state.get("generated_queries", []),
-    })
-    sessions = sessions[:10]  # keep last 10
-    _persist_sessions(sessions)
-    return sessions
+    }
 
 def _restore_session(s):
     # Stage under a temp key; the pre-widget block at top applies it after rerun.
@@ -1216,16 +1208,31 @@ if page == "Brief":
 
         st.markdown('<hr style="border-color:rgba(13,31,138,0.08);margin:1rem 0">', unsafe_allow_html=True)
 
-        # ── Saved Sessions ────────────────────────────────────────────────────
+        # ── Saved Sessions (per-user browser localStorage) ────────────────────
         st.markdown('<div class="sv-label">SAVED SESSIONS</div>', unsafe_allow_html=True)
-        _all_sessions = _load_saved_sessions()
+
+        # Read from this user's localStorage (returns 0 on first render while JS executes)
+        _ls_raw = st_javascript(
+            f"window.parent.localStorage.getItem('{_LS_KEY}') || '[]'",
+            key="ls_sessions_read",
+        )
+        if isinstance(_ls_raw, str) and _ls_raw not in ("0", "", "[]"):
+            try:
+                _parsed = json.loads(_ls_raw)
+                if isinstance(_parsed, list):
+                    st.session_state["_cached_sessions"] = _parsed
+            except Exception:
+                pass
+
+        _all_sessions = st.session_state.get("_cached_sessions", [])
+
         if _all_sessions:
             for _i, _s in enumerate(_all_sessions[:4]):
                 _col_name, _col_btn = st.columns([3, 1])
                 with _col_name:
                     st.markdown(
                         f"<div class='sv-item'>"
-                        f"<div><div class='sv-name'>{_s['name'] or _s['brief_space'] or 'Untitled'}</div>"
+                        f"<div><div class='sv-name'>{_s['name'] or _s.get('brief_space') or 'Untitled'}</div>"
                         f"<div class='sv-time'>{_s['timestamp']}</div></div>"
                         f"</div>",
                         unsafe_allow_html=True,
@@ -1240,8 +1247,11 @@ if page == "Brief":
         _save_name = st.text_input("Session name", placeholder="e.g. Nordic Living Room",
                                    label_visibility="collapsed", key="save_session_name")
         if st.button("Save Current Session", use_container_width=True, key="save_session_btn"):
-            _name = _save_name.strip() or (st.session_state.brief_space or "Untitled")
-            _save_current_session(_name)
+            _name = _save_name.strip() or (st.session_state.get("brief_space") or "Untitled")
+            _new_s = _build_session_record(_name)
+            _updated = ([_new_s] + _all_sessions)[:10]
+            st.session_state["_cached_sessions"] = _updated
+            _ls_write(_updated)
             st.success("Session saved!")
             st.rerun()
 
