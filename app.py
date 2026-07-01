@@ -1,8 +1,10 @@
 import streamlit as st
 import anthropic
 import urllib.parse
-import os, csv, io, re, requests, base64, json
+import os, csv, io, re, requests, base64, json, html, ipaddress, socket
 from datetime import datetime
+from email.utils import parseaddr
+from urllib.parse import urlparse
 from PIL import Image
 from colorthief import ColorThief
 from dotenv import load_dotenv
@@ -10,6 +12,28 @@ from collections import Counter
 from streamlit_javascript import st_javascript
 
 load_dotenv()
+
+def _is_safe_url(url):
+    """Block SSRF to private/internal IP ranges before fetching user-supplied URLs."""
+    try:
+        parsed = urlparse(url.strip())
+        if parsed.scheme not in ("http", "https"):
+            return False
+        host = parsed.hostname
+        if not host:
+            return False
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            ip = ipaddress.ip_address(socket.gethostbyname(host))
+        return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved)
+    except Exception:
+        return False
+
+def _is_valid_email(addr):
+    """Reject addresses that contain header-injection characters."""
+    _, parsed = parseaddr(addr)
+    return bool(parsed) and "@" in parsed and "\n" not in addr and "\r" not in addr
 
 _LS_KEY = "rf_sessions"  # localStorage key — private per browser/user
 
@@ -155,6 +179,8 @@ def search_pexels(query, n=9):
     except: return []
 
 def extract_palette(url, n=6):
+    if not _is_safe_url(url):
+        return []
     try:
         r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
         ct = ColorThief(io.BytesIO(r.content))
@@ -329,6 +355,8 @@ def extract_palette_from_bytes(file_bytes, n=6):
 def fetch_pinterest_image(url):
     """Extract image from a Pinterest pin URL, pinimg.com CDN URL, or any direct image URL."""
     url = url.strip()
+    if not _is_safe_url(url):
+        return None
     if re.search(r'\.(jpg|jpeg|png|webp)(\?[^#]*)?$', url, re.I) or 'pinimg.com' in url:
         return {"thumb": url, "full": url, "link": url, "author": "Pinterest", "source": "pinterest"}
     try:
@@ -1142,6 +1170,9 @@ if page == "Brief":
                     go_to("Search")
         with b2:
             if st.button("BROWSE IMAGES", key="cta_browse", use_container_width=True):
+                st.session_state.filter_results = []
+                st.session_state.browse_results = []
+                st.session_state["_auto_browse"] = True
                 go_to("Browse")
 
         st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
@@ -1248,10 +1279,12 @@ if page == "Brief":
             for _i, _s in enumerate(_all_sessions[:4]):
                 _col_name, _col_btns = st.columns([3, 2])
                 with _col_name:
+                    _sv_name = html.escape(_s['name'] or _s.get('brief_space') or 'Untitled')
+                    _sv_time = html.escape(_s['timestamp'])
                     st.markdown(
                         f"<div class='sv-item'>"
-                        f"<div><div class='sv-name'>{_s['name'] or _s.get('brief_space') or 'Untitled'}</div>"
-                        f"<div class='sv-time'>{_s['timestamp']}</div></div>"
+                        f"<div><div class='sv-name'>{_sv_name}</div>"
+                        f"<div class='sv-time'>{_sv_time}</div></div>"
                         f"</div>",
                         unsafe_allow_html=True,
                     )
@@ -1302,7 +1335,7 @@ if page == "Brief":
         if st.button("Send Board →", key="send_board_btn", type="primary", use_container_width=True):
             _email = st.session_state.get("board_email_input", "").strip()
             _imgs  = st.session_state.get("selected_images", [])
-            if not _email or "@" not in _email:
+            if not _email or not _is_valid_email(_email):
                 st.session_state["_send_result"] = ("warn", "Enter a valid email address.")
             elif not _imgs:
                 st.session_state["_send_result"] = ("warn", "Add images to your Board first.")
@@ -1421,7 +1454,7 @@ elif page == "Search":
             st.markdown(f"""
             <div class="qcard">
               <div class="qcard-num">Query {i}</div>
-              <div class="qcard-text">{qt}</div>
+              <div class="qcard-text">{html.escape(qt)}</div>
               {strip}
               <div class="btn-row">{src_buttons}</div>
             </div>""", unsafe_allow_html=True)
@@ -1472,21 +1505,29 @@ elif page == "Browse":
             with st.spinner("Fetching images..."):
                 st.session_state.filter_results = search_unsplash(q, n=9) + search_pexels(q, n=9)
 
+    def _run_browse_from_brief():
+        _snap = st.session_state.get("_brief_snapshot", {})
+        sp = st.session_state.brief_space or _snap.get("space", "")
+        mo = st.session_state.brief_mood or _snap.get("mood", "")
+        if not sp or not mo:
+            st.warning("Set a brief on the Home page first.")
+            return
+        if not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
+            st.warning("Add image API keys to Streamlit secrets.")
+            return
+        brief_bg_suffix = " white background isolated product photography" if st.session_state.brief_background == "White/Isolated" else ""
+        sty = st.session_state.brief_style or _snap.get("style", "Dreamy")
+        q = f"{sty} {sp} {mo}{brief_bg_suffix} interior architecture"
+        with st.spinner("Fetching images..."):
+            st.session_state.browse_results = search_unsplash(q, n=9) + search_pexels(q, n=9)
+
+    if st.session_state.pop("_auto_browse", False):
+        _run_browse_from_brief()
+
     fa2, _ = st.columns([2, 5])
     with fa2:
         if st.button("Browse from Brief", use_container_width=True):
-            _snap = st.session_state.get("_brief_snapshot", {})
-            sp = st.session_state.brief_space or _snap.get("space", "")
-            mo = st.session_state.brief_mood or _snap.get("mood", "")
-            if not sp or not mo: st.warning("Set a brief on the Home page first.")
-            elif not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
-                st.warning("Add image API keys to Streamlit secrets.")
-            else:
-                brief_bg_suffix = " white background isolated product photography" if st.session_state.brief_background == "White/Isolated" else ""
-                sty = st.session_state.brief_style or _snap.get("style", "Dreamy")
-                q = f"{sty} {sp} {mo}{brief_bg_suffix} interior architecture"
-                with st.spinner("Fetching images..."):
-                    st.session_state.browse_results = search_unsplash(q, n=9) + search_pexels(q, n=9)
+            _run_browse_from_brief()
 
     results = st.session_state.filter_results or st.session_state.browse_results
     if results:
@@ -1523,7 +1564,7 @@ elif page == "Palette":
             return
         if source_label:
             st.markdown(f"<div style='font-size:0.75rem;color:#3D5299;margin-bottom:0.6rem'>"
-                        f"Source: <strong>{source_label}</strong></div>", unsafe_allow_html=True)
+                        f"Source: <strong>{html.escape(source_label)}</strong></div>", unsafe_allow_html=True)
         st.markdown(
             "<div class='swatch-row'>" +
             "".join(f"<div class='swatch'><div class='swatch-block' style='background:{h}'></div>"
@@ -1837,7 +1878,7 @@ elif page == "Prompt":
                 resp = client.messages.create(model="claude-haiku-4-5-20251001", max_tokens=600,
                     messages=[{"role":"user","content":full}])
             result = resp.content[0].text.strip()
-            st.markdown(f"<div class='prompt-box'>{result}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='prompt-box'>{html.escape(result).replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
             dl_col, _ = st.columns([1,3])
             with dl_col:
                 st.download_button("Download .txt", result.encode(), "prompt.txt", "text/plain")

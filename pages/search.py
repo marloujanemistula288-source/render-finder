@@ -1,3 +1,4 @@
+import html
 import urllib.parse
 import streamlit as st
 import anthropic
@@ -57,7 +58,7 @@ def render():
                 st.markdown(f"""
                 <div class="query-card"><div class="query-card-inner">
                     <div class="card-label">Query {i}</div>
-                    <div class="card-query-text">{q}</div>
+                    <div class="card-query-text">{html.escape(q)}</div>
                     {strip_html}
                     <div class="btn-row">
                         <a class="ref-btn btn-pinterest" href="https://www.pinterest.com/search/pins/?q={enc}" target="_blank" rel="noopener">Pinterest</a>

@@ -1,4 +1,5 @@
 import re
+import html
 import json
 import urllib.parse
 import streamlit as st
@@ -57,13 +58,13 @@ def render():
 
             chips = ""
             if parsed.get("space"):
-                chips += f'<div class="brief-chip"><span class="brief-chip-label">Space</span>{parsed["space"]}</div>'
+                chips += f'<div class="brief-chip"><span class="brief-chip-label">Space</span>{html.escape(parsed["space"])}</div>'
             if parsed.get("style"):
-                chips += f'<div class="brief-chip"><span class="brief-chip-label">Style</span>{parsed["style"]}</div>'
+                chips += f'<div class="brief-chip"><span class="brief-chip-label">Style</span>{html.escape(parsed["style"])}</div>'
             if parsed.get("mood"):
-                chips += f'<div class="brief-chip"><span class="brief-chip-label">Mood</span>{parsed["mood"]}</div>'
+                chips += f'<div class="brief-chip"><span class="brief-chip-label">Mood</span>{html.escape(parsed["mood"])}</div>'
             for t in (parsed.get("themes") or []):
-                chips += f'<div class="brief-chip">{t}</div>'
+                chips += f'<div class="brief-chip">{html.escape(str(t))}</div>'
 
             st.markdown(f"""
             <div class="glass-card">
@@ -71,7 +72,7 @@ def render():
                             text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:0.5rem;">
                     Extracted from brief</div>
                 <div style="font-size:1rem;font-weight:600;color:#0C0C12;margin-bottom:0.6rem;">
-                    {parsed.get("project_name","")}</div>
+                    {html.escape(parsed.get("project_name",""))}</div>
                 <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">{chips}</div>
             </div>
             """, unsafe_allow_html=True)
@@ -96,7 +97,7 @@ def render():
                 st.markdown(f"""
                 <div class="query-card"><div class="query-card-inner">
                     <div class="card-label">Query {i}</div>
-                    <div class="card-query-text">{q}</div>
+                    <div class="card-query-text">{html.escape(q)}</div>
                     {strip_html}
                     <div class="btn-row">
                         <a class="ref-btn btn-pinterest" href="https://www.pinterest.com/search/pins/?q={enc}" target="_blank" rel="noopener">Pinterest</a>
