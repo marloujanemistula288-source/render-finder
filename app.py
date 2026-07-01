@@ -1,13 +1,51 @@
 import streamlit as st
 import anthropic
 import urllib.parse
-import os, csv, io, re, requests, base64
+import os, csv, io, re, requests, base64, json
+from datetime import datetime
 from PIL import Image
 from colorthief import ColorThief
 from dotenv import load_dotenv
 from collections import Counter
 
 load_dotenv()
+
+SESSIONS_FILE = "saved_sessions.json"
+
+def _load_saved_sessions():
+    try:
+        with open(SESSIONS_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+def _persist_sessions(sessions):
+    try:
+        with open(SESSIONS_FILE, "w") as f:
+            json.dump(sessions, f, indent=2)
+    except Exception:
+        pass
+
+def _save_current_session(name):
+    sessions = _load_saved_sessions()
+    sessions.insert(0, {
+        "name": name,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "brief_space": st.session_state.get("brief_space", ""),
+        "brief_style": st.session_state.get("brief_style", "Dreamy"),
+        "brief_mood": st.session_state.get("brief_mood", ""),
+        "brief_background": st.session_state.get("brief_background", "White/Isolated"),
+        "selected_images": st.session_state.get("selected_images", []),
+        "saved_palettes": st.session_state.get("saved_palettes", []),
+        "generated_queries": st.session_state.get("generated_queries", []),
+    })
+    sessions = sessions[:10]  # keep last 10
+    _persist_sessions(sessions)
+    return sessions
+
+def _restore_session(s):
+    # Stage under a temp key; the pre-widget block at top applies it after rerun.
+    st.session_state["_session_restore"] = s
 
 st.set_page_config(page_title="Render Finder", layout="wide", initial_sidebar_state="collapsed")
 
@@ -45,6 +83,16 @@ if "_brief_extracted" in st.session_state:
         st.session_state["brief_mood"] = _ext["mood"]
     if _ext.get("background") and _ext["background"] in BG_OPTIONS:
         st.session_state["brief_background"] = _ext["background"]
+
+if "_session_restore" in st.session_state:
+    _sr = st.session_state.pop("_session_restore")
+    st.session_state["brief_space"]       = _sr.get("brief_space", "")
+    st.session_state["brief_style"]       = _sr.get("brief_style", "Dreamy")
+    st.session_state["brief_mood"]        = _sr.get("brief_mood", "")
+    st.session_state["brief_background"]  = _sr.get("brief_background", "White/Isolated")
+    st.session_state["selected_images"]   = _sr.get("selected_images", [])
+    st.session_state["saved_palettes"]    = _sr.get("saved_palettes", [])
+    st.session_state["generated_queries"] = _sr.get("generated_queries", [])
 FILTER_SPACES = ["Living Room","Bedroom","Kitchen","Office","Courtyard","Exterior","Dining Room","Studio","Bathroom"]
 FILTER_STYLES = ["Dreamy","Minimal","Dark Moody","Maximalist","Brutalist","Japandi","Bohemian","Industrial","Coastal"]
 FILTER_MOODS  = ["Warm","Cool","Cozy","Editorial","Raw","Airy","Dramatic","Serene","Earthy","Luxe"]
@@ -656,11 +704,22 @@ label { color: #3D5299 !important; font-size: 0.8rem !important; }
     max-width: 310px; margin-bottom: 2rem; font-family: 'Inter', sans-serif;
 }
 
+/* ── Saved sessions ── */
+.sv-label { font-size: 0.67rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #1635CC; font-weight: 700; margin-bottom: 0.5rem; font-family: 'Inter', sans-serif; }
+.sv-item { display: flex; justify-content: space-between; align-items: center;
+    padding: 0.45rem 0; border-bottom: 1px solid rgba(13,31,138,0.08); }
+.sv-item:last-child { border-bottom: none; }
+.sv-name { font-size: 0.78rem; font-weight: 600; color: #0D1F8A; font-family: 'Inter', sans-serif;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+.sv-time { font-size: 0.68rem; color: #8892C0; font-family: 'Inter', sans-serif; }
+.sv-empty { font-size: 0.75rem; color: #8892C0; font-family: 'Inter', sans-serif; font-style: italic; }
+
 /* ── Stats grid ── */
 .zn-stats-grid { display: flex; gap: 1.5rem; margin-bottom: 1rem; }
 .zn-stat { text-align: center; flex: 1; }
 .zn-stat-val { font-size: 1.9rem; font-weight: 700; color: #0D1F8A; font-family: 'Inter', sans-serif; line-height: 1; }
-.zn-stat-lbl { font-size: 0.7rem; color: #8892C0; margin-top: 0.3rem; font-family: 'Inter', sans-serif; }
+.zn-stat-lbl { font-size: 0.75rem; color: #ffffff; margin-top: 0.3rem; font-family: 'Inter', sans-serif; letter-spacing: 0.03em; }
 
 /* ── Page header for sub-pages ── */
 .zn-page-header { margin-bottom: 2rem; position: relative; z-index: 10; }
@@ -744,7 +803,7 @@ hr { border-color:rgba(13,31,138,0.09) !important; }
     color: #1635CC; font-weight: 700; margin-bottom: 0.35rem; font-family: 'Inter', sans-serif;
 }
 .sc-body {
-    font-size: 0.78rem; color: #3D5299; line-height: 1.5; margin-bottom: 0.85rem;
+    font-size: 0.78rem; color: #ffffff; line-height: 1.5; margin-bottom: 0.85rem;
     font-family: 'Inter', sans-serif;
 }
 
@@ -841,15 +900,55 @@ button[data-testid="stTab"][aria-selected="true"] p {
 [data-testid="stRadio"] [role="radiogroup"] label:has(input:checked) [data-testid="stMarkdownContainer"] p {
     color: #1a1a6e !important;
 }
-/* Radio indicator dot — unselected */
+/* Radio indicator — unselected: white fill, blue border */
 [data-testid="stRadio"] [role="radiogroup"] label > div:first-child {
-    background-color: rgba(100, 120, 220, 0.12) !important;
-    border: 2px solid rgba(100, 120, 220, 0.4) !important;
+    background-color: #ffffff !important;
+    border: 2px solid rgba(100, 120, 220, 0.5) !important;
 }
-/* Radio indicator dot — selected: navy instead of Streamlit red */
+/* Radio indicator inner dot — hidden when unselected */
+[data-testid="stRadio"] [role="radiogroup"] label > div:first-child > div {
+    background-color: transparent !important;
+}
+/* Radio indicator — selected: white fill, navy border */
 [data-testid="stRadio"] [role="radiogroup"] label:has(input:checked) > div:first-child {
-    background-color: #1a1a6e !important;
+    background-color: #ffffff !important;
     border-color: #1a1a6e !important;
+}
+/* Radio indicator inner dot — navy when selected */
+[data-testid="stRadio"] [role="radiogroup"] label:has(input:checked) > div:first-child > div {
+    background-color: #1a1a6e !important;
+}
+/* Checkbox indicator — white fill, blue border */
+[data-testid="stCheckbox"] label > span:first-child {
+    background-color: #ffffff !important;
+    border: 2px solid rgba(100, 120, 220, 0.5) !important;
+}
+/* Checkbox checked — white fill with navy border, SVG checkmark visible */
+[data-testid="stCheckbox"] label:has(input:checked) > span:first-child {
+    background-color: #ffffff !important;
+    border-color: #1a1a6e !important;
+}
+[data-testid="stCheckbox"] label:has(input:checked) > span:first-child svg {
+    fill: #1a1a6e !important;
+    color: #1a1a6e !important;
+}
+
+/* ── Info & Warning alerts — tangerine theme ── */
+[data-testid="stAlert"],
+[data-testid="stAlertContainer"] {
+    background-color: #FFE5CC !important;
+    border: 1px solid #FF8C42 !important;
+    border-radius: 10px !important;
+}
+[data-testid="stAlertContainer"] p,
+[data-testid="stAlertContainer"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stAlert"] p {
+    color: #C04A0A !important;
+}
+[data-testid="stAlertContainer"] svg,
+[data-testid="stAlert"] svg {
+    fill: #FF8C42 !important;
+    color: #FF8C42 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -893,11 +992,17 @@ with c_nav:
     )
 
 with c_conn:
-    brief_lbl = (st.session_state.brief_space[:10]+"…"
-                 if len(st.session_state.brief_space) > 10
-                 else st.session_state.brief_space) if st.session_state.brief_space else "BRIEF"
-    if st.button(f"{brief_lbl} ●", key="nav_connect", type="primary", use_container_width=True):
-        go_to("Brief")
+    with open("render-image-finder.skill", "rb") as _f:
+        _skill_bytes = _f.read()
+    st.download_button(
+        label="DOWNLOAD SKILL ●",
+        data=_skill_bytes,
+        file_name="render-image-finder.skill",
+        mime="application/zip",
+        key="nav_connect",
+        type="primary",
+        use_container_width=True,
+    )
 
 st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
@@ -1005,25 +1110,70 @@ if page == "Brief":
                 go_to("Board")
 
         st.markdown('<hr style="border-color:rgba(13,31,138,0.08);margin:1rem 0">', unsafe_allow_html=True)
+
+        # ── Saved Sessions ────────────────────────────────────────────────────
+        st.markdown('<div class="sv-label">SAVED SESSIONS</div>', unsafe_allow_html=True)
+        _all_sessions = _load_saved_sessions()
+        if _all_sessions:
+            for _i, _s in enumerate(_all_sessions[:4]):
+                _col_name, _col_btn = st.columns([3, 1])
+                with _col_name:
+                    st.markdown(
+                        f"<div class='sv-item'>"
+                        f"<div><div class='sv-name'>{_s['name'] or _s['brief_space'] or 'Untitled'}</div>"
+                        f"<div class='sv-time'>{_s['timestamp']}</div></div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                with _col_btn:
+                    if st.button("Load", key=f"restore_{_i}", use_container_width=True):
+                        _restore_session(_s)
+                        st.rerun()
+        else:
+            st.markdown("<div class='sv-empty'>No saved sessions yet.</div>", unsafe_allow_html=True)
+
+        _save_name = st.text_input("Session name", placeholder="e.g. Nordic Living Room",
+                                   label_visibility="collapsed", key="save_session_name")
+        if st.button("Save Current Session", use_container_width=True, key="save_session_btn"):
+            _name = _save_name.strip() or (st.session_state.brief_space or "Untitled")
+            _save_current_session(_name)
+            st.success("Session saved!")
+            st.rerun()
+
+        st.markdown('<hr style="border-color:rgba(13,31,138,0.08);margin:1rem 0">', unsafe_allow_html=True)
         st.markdown("""
         <div class="sc-title">STAY CONNECTED</div>
         <div class="sc-body">Forward your curated board references straight to your inbox.</div>
         """, unsafe_allow_html=True)
-        board_email = st.text_input("Email", placeholder="you@studio.com",
-                                    key="board_email_input", label_visibility="collapsed")
-        if st.button("Send Board →", key="send_board_btn", type="primary", use_container_width=True):
-            if not board_email or "@" not in board_email:
-                st.warning("Enter a valid email address.")
-            elif not st.session_state.selected_images:
-                st.warning("Add images to your Board first.")
+     board_email = st.text_input("Email", placeholder="you@studio.com",
+                            key="board_email_input", label_visibility="collapsed")
+if st.button("Send Board →", key="send_board_btn", type="primary", use_container_width=True):
+            _email = st.session_state.get("board_email_input", "").strip()
+            _imgs  = st.session_state.get("selected_images", [])
+            if not _email or "@" not in _email:
+                st.session_state["_send_result"] = ("warn", "Enter a valid email address.")
+            elif not _imgs:
+                st.session_state["_send_result"] = ("warn", "Add images to your Board first.")
             else:
-                sent, msg = send_board_email(board_email, st.session_state.selected_images)
+                sent, msg = send_board_email(_email, _imgs)
                 if sent:
-                    st.success(f"Board sent to {board_email}!")
-                elif msg == "no_smtp":
-                    links = "\n".join(img["link"] for img in st.session_state.selected_images)
-                    st.text_area("Copy these links:", links, height=90, key="board_links_out")
-                    st.caption("Add SMTP_HOST / SMTP_USER / SMTP_PASS to secrets for direct email.")
+                    st.session_state["_send_result"] = ("ok", f"Board sent to {_email}!")
+                else:
+                    st.session_state["_send_result"] = ("err", msg)
+            st.rerun()
+               # ── Send board feedback (rendered outside column so it always shows) ──
+if "_send_result" in st.session_state:
+    _kind, _txt = st.session_state.pop("_send_result")
+    if _kind == "ok":
+        st.success(_txt)
+    elif _kind == "warn":
+        st.warning(_txt)
+    else:
+        # SMTP error — show links fallback
+        st.warning(f"Email error: {_txt}")
+        links = "\n".join(img["link"] for img in st.session_state.get("selected_images", []))
+        if links:
+            st.text_area("Copy these links instead:", links, height=90, key="board_links_out")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: Search
@@ -1046,7 +1196,7 @@ elif page == "Search":
         _snap = st.session_state.get("_brief_snapshot", {})
         sp = st.session_state.brief_space or _snap.get("space", "")
         mo = st.session_state.brief_mood or _snap.get("mood", "")
-        if not sp or not mo:
+        if not render_elem and (not sp or not mo):
             st.warning("Go to **Home** and fill in Space and Mood first.")
         else:
             sty = st.session_state.brief_style or _snap.get("style", "Dreamy")
@@ -1173,13 +1323,16 @@ elif page == "Browse":
     fa2, _ = st.columns([2, 5])
     with fa2:
         if st.button("Browse from Brief", use_container_width=True):
-            sp = st.session_state.brief_space; mo = st.session_state.brief_mood
+            _snap = st.session_state.get("_brief_snapshot", {})
+            sp = st.session_state.brief_space or _snap.get("space", "")
+            mo = st.session_state.brief_mood or _snap.get("mood", "")
             if not sp or not mo: st.warning("Set a brief on the Home page first.")
             elif not get_secret("UNSPLASH_ACCESS_KEY") and not get_secret("PEXELS_API_KEY"):
                 st.warning("Add image API keys to Streamlit secrets.")
             else:
                 brief_bg_suffix = " white background isolated product photography" if st.session_state.brief_background == "White/Isolated" else ""
-                q = f"{st.session_state.brief_style} {sp} {mo}{brief_bg_suffix} interior architecture"
+                sty = st.session_state.brief_style or _snap.get("style", "Dreamy")
+                q = f"{sty} {sp} {mo}{brief_bg_suffix} interior architecture"
                 with st.spinner("Fetching images..."):
                     st.session_state.browse_results = search_unsplash(q, n=9) + search_pexels(q, n=9)
 
